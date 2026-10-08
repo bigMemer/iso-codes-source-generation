@@ -20,4 +20,8 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v6
-      - run: ./gradlew build javadoc -PisoCodesVersion=${{ matrix.iso-codes }}
+      - run: ./gradlew build javadoc exportOutput -PisoCodesVersion=${{ matrix.iso-codes }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: generated-iso-codes-${{ matrix.iso-codes }}
+          path: build/output/

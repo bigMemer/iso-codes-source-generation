@@ -5,4 +5,4 @@ pluginManagement {
     }
 }
 
-rootProject.name = "iso-codes-java"
+rootProject.name = "iso-codes-source-generation"

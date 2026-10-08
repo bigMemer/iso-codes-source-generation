@@ -1,15 +1,33 @@
-# iso-codes-java
+# iso-codes-source-generation
 
-Java enums and classes generated from [Debian's iso-codes](https://salsa.debian.org/iso-codes-team/iso-codes),
-published to Maven Central. Each artifact version is the iso-codes release it was generated from.
+Generates Java sources from [Debian's iso-codes](https://salsa.debian.org/iso-codes-team/iso-codes) JSON data.
 
-```kotlin
-dependencies {
-    implementation("com.wwwdottheinternetdotcom:iso-codes:4.20.1")
-}
+This repo holds only the generator. The generated library lives in
+[bigMemer/iso-codes-java](https://github.com/bigMemer/iso-codes-java), which is what consumers depend on and what
+gets published to Maven Central. Generated code only reaches that repo through pull requests opened by this one.
+
+## How it works
+
+`buildSrc/` contains a Gradle task that downloads one iso-codes release from salsa.debian.org and writes Java
+sources for it. The build then compiles those sources, runs `src/test` against them and builds their Javadoc, so a
+generator bug fails here instead of in the output repo.
+
+```sh
+./gradlew build                                   # generate + test the isoCodesVersion in gradle.properties
+./gradlew build exportOutput -PisoCodesVersion=4.7.0
 ```
 
-Types live under `com.wwwdottheinternetdotcom.isocodes`.
+`exportOutput` writes exactly the files the output repo tracks to `build/output/`:
+
+```
+build/output/
+├── iso-codes.version          # the upstream release, e.g. 4.20.1
+└── src/main/java/...          # generated sources
+```
+
+`scripts/upstream_versions.py` lists the supported upstream releases (3.67 onward; `--latest` for the newest).
+
+## Generated API
 
 | Standard   | Type                     | Kind  | Lookups                                          |
 |------------|--------------------------|-------|--------------------------------------------------|
@@ -22,44 +40,24 @@ Types live under `com.wwwdottheinternetdotcom.isocodes`.
 | ISO 639-3  | `iso639.Language`        | class | `fromAlpha3`, `fromAlpha2`, `fromBibliographic`, `all()` |
 | ISO 639-5  | `iso639.LanguageFamily`  | enum  | `fromAlpha3`                                     |
 
-```java
-Country de = Country.DE;
-de.alpha3();                          // "DEU"
-de.officialName();                    // Optional[Federal Republic of Germany]
-Country.fromNumeric("276");           // Optional[DE]
-Subdivision.fromCode("US-CA");        // Optional[US-CA]
-Language.fromAlpha3("eng").map(Language::englishName); // Optional[English]
-```
+ISO 3166-2 and ISO 639-3 have thousands of entries, more than a single JVM class can hold as enum constants, so
+they are plain classes split across package-private data holder classes. A field present on every entry returns
+`String`; one only some entries have returns `Optional<String>`. The JSON `name` field is exposed as
+`englishName()` because `name()` is taken by `Enum`.
 
-ISO 3166-2 and ISO 639-3 have thousands of entries, which is more than a single JVM class can hold as enum
-constants, so they are plain classes with lookup methods instead.
+## CI
 
-Accessors mirror the upstream JSON fields. A field present on every entry returns `String`; one that only some
-entries have returns `Optional<String>`. The JSON `name` field is exposed as `englishName()` because `name()` is
-taken by `Enum`. Fields appear and disappear across upstream releases (e.g. `Country.flag()` exists from 4.8.0 on),
-so the API of each version follows its data.
+- **CI** (`ci.yml`): on every push, builds and tests three representative releases and uploads each one's
+  `build/output/` as a workflow artifact.
+- **Propose output update** (`propose-update.yml`): run manually with an iso-codes version (blank means newest).
+  It generates and tests the sources, uploads them as an artifact, then opens or updates a pull request on
+  `bigMemer/iso-codes-java` from branch `iso-codes/<version>`.
 
-Releases from 3.67 onward are published. 3.66 used an older JSON layout and earlier releases had no JSON.
-
-## Building
-
-```sh
-./gradlew build                            # generates from the isoCodesVersion in gradle.properties
-./gradlew build -PisoCodesVersion=4.7.0    # or any other release
-```
-
-Generated sources land in `build/generated/sources/iso-codes`. The generator lives in `buildSrc/`.
-
-## Releasing
-
-`.github/workflows/release.yml` (manual for now; a weekly schedule is commented out in the file) lists upstream tags, compares them with what's already on Maven
-Central (`scripts/unpublished_versions.py`), and publishes each missing release, oldest first. Run it manually
-from the Actions tab (with dry-run unticked) to publish immediately.
-
-Required repository secrets: `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD` (a Central Portal user token),
-`SIGNING_KEY` (ASCII-armored GPG private key), `SIGNING_KEY_PASSWORD`.
+  **Not wired up yet:** the PR step needs a credential for the output repo, and which mechanism to use
+  (fine-grained PAT or GitHub App) hasn't been decided. Until then the `open-pr` job fails at a clearly marked
+  TODO step; the `generate` job and its artifact still work.
 
 ## Licence
 
-The data, and therefore the generated code, comes from iso-codes, which is licensed under the
-[GNU LGPL 2.1 or later](LICENSE). This project uses the same licence.
+The generated code derives from iso-codes data, licensed under the [GNU LGPL 2.1 or later](LICENSE). This
+generator uses the same licence.

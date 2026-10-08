@@ -1,15 +1,10 @@
-import com.vanniktech.maven.publish.JavaLibrary
-import com.vanniktech.maven.publish.JavadocJar
-import com.vanniktech.maven.publish.SourcesJar
 import isocodes.gen.GenerateIsoCodesTask
 
 plugins {
-    `java-library`
-    id("com.vanniktech.maven.publish") version "0.37.0"
+    java
 }
 
 val upstreamVersion = providers.gradleProperty("isoCodesVersion").get()
-version = upstreamVersion
 
 repositories {
     mavenCentral()
@@ -26,6 +21,7 @@ val generateIsoCodes = tasks.register<GenerateIsoCodesTask>("generateIsoCodes") 
     outputDirectory = layout.buildDirectory.dir("generated/sources/iso-codes")
 }
 
+// Generated sources are compiled and tested here so a broken generator never reaches the output repo.
 sourceSets.main {
     java.srcDir(generateIsoCodes)
 }
@@ -51,43 +47,20 @@ tasks.test {
     systemProperty("basePackage", providers.gradleProperty("basePackage").get())
 }
 
-mavenPublishing {
-    configure(JavaLibrary(javadocJar = JavadocJar.Javadoc(), sourcesJar = SourcesJar.Sources()))
-    publishToMavenCentral()
-    // Signing keys only exist in CI; local publishToMavenLocal works unsigned.
-    if (providers.gradleProperty("signingInMemoryKey").isPresent) {
-        signAllPublications()
-    }
-
-    coordinates(group.toString(), "iso-codes", upstreamVersion)
-
-    pom {
-        name = "iso-codes-java"
-        description = "Java enums and classes generated from Debian's iso-codes (ISO 639, 3166, 4217, 15924) $upstreamVersion."
-        url = providers.gradleProperty("projectUrl")
-        inceptionYear = "2026"
-        licenses {
-            license {
-                name = "LGPL-2.1-or-later"
-                url = "https://spdx.org/licenses/LGPL-2.1-or-later.html"
-                distribution = "repo"
-            }
-        }
-        developers {
-            developer {
-                id = providers.gradleProperty("developerId")
-                name = providers.gradleProperty("developerName")
-                url = providers.gradleProperty("developerUrl")
-            }
-        }
-        scm {
-            url = providers.gradleProperty("projectUrl")
-            connection = providers.gradleProperty("projectUrl").map { "scm:git:$it.git" }
-            developerConnection = providers.gradleProperty("projectUrl").map { "scm:git:$it.git" }
-        }
+val writeVersionFile = tasks.register("writeVersionFile") {
+    val versionFile = layout.buildDirectory.file("iso-codes-version/iso-codes.version")
+    val version = upstreamVersion // local copy so the action doesn't capture the build script
+    inputs.property("isoCodesVersion", version)
+    outputs.file(versionFile)
+    doLast {
+        versionFile.get().asFile.writeText("$version\n")
     }
 }
 
-tasks.withType<Jar>().configureEach {
-    from("LICENSE") { into("META-INF") }
+// The exact files the iso-codes-java output repo tracks: generated sources plus the upstream version they came from.
+tasks.register<Sync>("exportOutput") {
+    description = "Assembles the generated files for the iso-codes-java output repo in build/output."
+    from(generateIsoCodes) { into("src/main/java") }
+    from(writeVersionFile)
+    into(layout.buildDirectory.dir("output"))
 }
