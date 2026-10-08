@@ -69,8 +69,8 @@ code.
 | Field | Precedence | Notes |
 |-------|------------|-------|
 | Codes (`alpha_2`, `alpha_3`, `numeric`, `code`) | overrides, CLDR, iso-codes | They agree except during transitions; disagreements are flagged. |
-| `name` | overrides, iso-codes, CLDR, Wikidata | iso-codes has ISO's spelling. CLDR's English name is a fallback for unconfirmed codes and will read differently ("Brussels" against ISO's "Bruxelles-Capitale, Région de"), so a fallback name is always flagged. |
-| `official_name`, `common_name` (3166-1) | overrides, iso-codes, Wikidata | CLDR has no equivalent. |
+| `name` | overrides, iso-codes, CLDR, Wikidata | iso-codes has ISO's spelling. For codes iso-codes doesn't have yet, CLDR's English name is used (decided), so `name` stays required. It may read differently ("Brussels" against ISO's "Bruxelles-Capitale, Région de"), so a fallback name is always flagged. |
+| `official_name`, `common_name` (3166-1) | overrides, iso-codes, Wikidata | CLDR has no equivalent. Wikidata's "official name" (`P1448`, English value) is accepted for `official_name` (decided); its values are always flagged. |
 | `type` (3166-2) | overrides, iso-codes, Wikidata | CLDR has none. Wikidata's types are its own categories ("province of Spain"), so a Wikidata value is always flagged. |
 | `parent` (3166-2) | overrides, iso-codes, CLDR | CLDR has containment lists. |
 | `flag` (3166-1) | derived from `alpha_2` | Not taken from any source. |
@@ -134,11 +134,73 @@ Generated libraries contain data from all four sources:
 - Wikidata: CC0, no conditions
 - overrides: ours
 
-So the output is `LGPL-2.1-or-later AND Unicode-3.0`, plus our own licence for overrides and generated code
-structure (to be chosen). The per-file SPDX header carries the combined expression, and each package ships both
-licence texts.
+Our own contributions (overrides, and the structure and code the emitters generate) are dual-licensed
+`Apache-2.0 OR MIT`, at the consumer's choice. So the output as a whole is:
 
-## 9. Impact on existing code and docs
+```
+(Apache-2.0 OR MIT) AND LGPL-2.1-or-later AND Unicode-3.0
+```
+
+The per-file SPDX header carries that expression, and each package ships all four licence texts (Apache-2.0, MIT,
+LGPL-2.1, and Unicode's notice).
+
+## 9. History
+
+Withdrawn codes and earlier values are kept, best-effort, as part of the dataset rather than dropped. They support
+functions that help consumers migrate data (to be specified in the output spec), such as looking up a withdrawn
+code's successors.
+
+### 9.1 What is recorded
+
+Per code:
+
+| Attribute | Meaning |
+|-----------|---------|
+| `status` | `active` or `withdrawn` |
+| `effective_from`, `effective_to` | When ISO introduced and withdrew the code, where known (from §5's `effective_at`) |
+| `known_from`, `known_to` | When our sources first and last had the code (from §5's `known_at`) |
+| `successors` | For a withdrawn code: the codes that replaced it, each with a relation: `renamed_to`, `split_into`, `merged_into`, or `promoted_to_country` (CLDR's `overlong` case, e.g. `US-PR` → `PR`). May be empty, or `unknown_within_country`, when no source says. |
+| `predecessors` | The inverse, for active codes. |
+
+Per field value: earlier values with the same interval attributes, e.g. a subdivision's previous names, types and
+parents.
+
+Missing dates and successors are explicit (`unknown`), never guessed silently.
+
+### 9.2 Where history comes from
+
+| Source | Gives | Depth |
+|--------|-------|-------|
+| iso-codes release history | First and last release containing each code and each value | 35 releases, 3.67 (2016) onward |
+| CLDR release history | The same, from CLDR's side | 31 releases, CLDR 28 (2015) onward |
+| CLDR alias table | Withdrawn codes with replacements and reasons: 599 subdivisions withdrawn (`deprecated`), 27 `overlong`, 27 country codes | Current release, cumulative |
+| iso3166-updates change log | ISO's effective dates and change descriptions (free text), 909 entries | Back to the 1990s |
+| iso-codes ISO 3166-3 data | Withdrawn country codes with withdrawal dates (31 entries) | Cumulative |
+| Wikidata | End-time qualifiers on code statements | Noisy, so it only flags items for review |
+| Overrides | Corrections and successor links nobody else provides | — |
+
+Withdrawn ISO 3166-1 codes are exactly what ISO 3166-3 lists, so 3166-3 comes back as history data, not as a
+separate standard type.
+
+### 9.3 Successor links
+
+Successors are the weakest part. Of CLDR's 599 withdrawn subdivision codes, 120 have exact replacements (including
+splits like `LU-D` → five cantons). The other 479 only say "somewhere in this country" (`IN-OR` → `in?`, though
+ISO renamed it to `IN-OD`). Successors are resolved in this order, each step only for codes the previous ones
+didn't resolve:
+
+1. overrides;
+2. CLDR's exact replacements (120 codes);
+3. renames parsed from the ISO change log. Its text names 415 of the 479 vague cases, but only 23 are phrased as a
+   parseable "from X to Y";
+4. a same-name match within the same country and the same source release, e.g. `KZ-AKM` "Akmolinskaja oblast'"
+   becoming `KZ-11` with the same name. Always flagged for review;
+5. otherwise `unknown_within_country`.
+
+The change report lists every link resolved by steps 3 or 4, and every unresolved one, so reviewers can turn them
+into overrides over time.
+
+## 10. Impact on existing code and docs
 
 - `SourceData`'s single `sourceName`/`sourceVersion`/`sourceLicense` becomes a list of sources. Values gain the
   §5 provenance metadata.
@@ -146,15 +208,25 @@ licence texts.
   `source-isocodes` keeps its role but no longer defines the library version.
 - Output spec §5.5 (dataset information) and §9 (versioning) change to dataset versions and a list of upstream
   versions.
+- Output spec gains withdrawn entries and history (§9 here). How withdrawn codes appear in the generated API is not
+  yet specified; see open questions.
 - `scripts/upstream_versions.py` and the propose-update workflow change from per-iso-codes-release to the triggers
   in §6.
 
-## 10. Open questions
+## 11. Decisions and open questions
 
-1. **Our licence** for overrides and generated structure (§8).
-2. **Names for unconfirmed codes:** CLDR's English name as a fallback (current proposal), or leave the name out
-   until iso-codes confirms it. That would make `name` optional, which the output spec forbids today.
-3. **Wikidata's role for 3166-1 names:** whether its "official name" property (`P1448`) is good enough to fill
-   `official_name`. Not yet tested.
-4. **Removal grace:** whether a code CLDR marks `deprecated` should disappear immediately, or stay flagged for one
-   release so consumers see it coming.
+Decided:
+
+- Our licence: `Apache-2.0 OR MIT` (§8).
+- Names for codes iso-codes doesn't have yet: CLDR's English name (§4).
+- Wikidata's "official name" is good enough to fill `official_name` (§4).
+- Withdrawn codes are kept as best-effort history (§9), not dropped.
+
+Open:
+
+1. **Withdrawn codes in the API.** Matching withdrawn codes is another strictness axis, with a more granular dial
+   than the on/off `Relaxation`s: for example current codes only (default), codes withdrawn since a given date,
+   codes valid as of a given date, or any code ever issued. A match on a withdrawn code would report that, with its
+   successors. To be designed together with the migration functions.
+2. **Whether withdrawn entries are members of the enumeration** (Java: `@Deprecated` enum constants), or a separate
+   history API alongside it. This depends on the same functions.
