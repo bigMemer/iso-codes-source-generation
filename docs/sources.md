@@ -13,8 +13,8 @@ second-hand copy with its own strengths, measured against each other on 2026-10-
 
 | Source | Strength | Weakness | Licence |
 |--------|----------|----------|---------|
-| **Unicode CLDR** | Usually first to pick up changes. `BS-NP`: ISO added it 2018-11-26, CLDR committed it 2019-02-26 and released it in CLDR 35 on 2019-03-27. Records withdrawn codes with replacements and reasons. Releases on a fixed cadence. | Leaves out 19 ISO codes as a modelling choice. No subdivision type. English display names instead of ISO's names. | Unicode-3.0 |
-| **Debian iso-codes** | Faithful to ISO: ISO's names, subdivision types, official names. Trusted to be **right**. | Often **stale**: `BS-NP` arrived 2021-08-27, about 33 months after ISO. | LGPL-2.1-or-later |
+| **Unicode CLDR** | Usually first to pick up changes. `BS-NP`: ISO re-assigned it 2018-11-26 (it had been withdrawn in 2010), CLDR committed it 2019-02-26 and released it in CLDR 35 on 2019-03-27. Records withdrawn codes with replacements and reasons. Releases on a fixed cadence. | Leaves out 19 ISO codes as a modelling choice. No subdivision type. English display names instead of ISO's names. | Unicode-3.0 |
+| **Debian iso-codes** | Faithful to ISO: ISO's names, subdivision types, official names. Trusted to be **right**. | Often **stale**: `BS-NP`'s re-assignment arrived 2021-08-27, about 33 months after ISO. | LGPL-2.1-or-later |
 | **Wikidata** | Broad, sometimes has what others lack. | Noisy: duplicate items, inconsistent markers, malformed values, withdrawn codes not marked as ended. | CC0 |
 | **Overrides** (this repo) | Human-reviewed corrections, each with evidence. | Manual work. | Ours |
 
@@ -170,7 +170,12 @@ Per code:
 Per field value: earlier values with the same interval attributes, e.g. a subdivision's previous names, types and
 parents.
 
-Missing dates are explicit (`unknown`), never guessed silently. Every date is stored as an interval: an exact day,
+Missing dates are explicit (`unknown`), never guessed silently.
+
+**Recorded since.** Each code records the earliest date from which the sources account for its status
+continuously (output spec §5.1 `recorded_since`): usually iso-codes' first commit (2004-02-22) for codes it had
+then, or the first source snapshot or dated change-log entry otherwise. Before ISO first published a standard
+(ISO 3166-1 in 1974; ISO 3166-2 in 1998-12, per ISO's catalogue), every code's state is `PREDATES_STANDARD`. Every date is stored as an interval: an exact day,
 a coarser precision (`1993`), or only a latest possible date (the first source release showing the change).
 Generated libraries expose these intervals as earliest/latest dates and use them for `written_at` checks
 (output spec §6.7), which report every state an imprecise date allows.
@@ -188,10 +193,10 @@ bound.
 
 | Source | Gives | Depth |
 |--------|-------|-------|
-| iso-codes release history | First and last release containing each code and each value | 35 releases, 3.67 (2016) onward |
+| iso-codes git history | First and last appearance of each code and each value | Every commit since 2004-02-22: a tab-separated file until 2006, XML until 2016, JSON since. Its first commit already has 4,489 subdivision codes, so most codes are recorded from 2004. |
 | CLDR release history | The same, from CLDR's side | 31 releases, CLDR 28 (2015) onward |
 | CLDR alias table | Which codes are withdrawn, and why: 599 subdivisions withdrawn (`deprecated`), 27 `overlong`, 27 country codes. Only the status and reason are used; CLDR's replacement values are ignored. | Current release, cumulative |
-| iso3166-updates change log | ISO's effective dates and change descriptions (free text), 909 entries | Back to the 1990s |
+| iso3166-updates change log | ISO's effective dates and change descriptions (free text), 909 entries | Back to the 1990s. Doesn't always name what it removes: its 2010 Bahamas entry ("21 districts → 32 districts") never mentions that `BS-NP` was withdrawn, and its 2018 entry calls the re-assignment "Subdivision added". The iso-codes history shows both. |
 | iso-codes ISO 3166-3 data | Withdrawn country codes with withdrawal dates (31 entries) | Cumulative |
 | Wikidata | End-time qualifiers on code statements | Noisy, so it only flags items for review |
 | Overrides | Corrections, e.g. a missing or wrong date | — |
@@ -226,12 +231,9 @@ Decided:
 - `written_at` checks report the set of possible states (`SAME`, `OTHER`, `WITHDRAWN`, `UNASSIGNED`, or
   `UNRECORDED`) and pass or fail by a `HistoryPolicy` dial, default `PESSIMISTIC` (output spec §6.7).
 - No grace-period logic in the library; callers apply their own using the date ranges.
+- Recorded history starts per code (`recorded_since`), not per standard. Dates before a standard's first
+  publication give `PREDATES_STANDARD`.
 
 Open:
 
-1. **Where recorded history starts** (`history_recorded_since`, output spec §5.5), per standard. Before that date a
-   `written_at` check reports `UNRECORDED`. Candidates for ISO 3166-2: ISO's first 3166-2 edition (believed 1998,
-   before which every subdivision code was unassigned), the earliest dated subdivision entry in the change log
-   (2000-06-21), or our first source snapshots (2015-16). Needs measuring how complete the change log is.
-
-2. **A grace-period convenience** on top of the withdrawal date ranges. Callers can already do it themselves.
+1. **A grace-period convenience** on top of the withdrawal date ranges. Callers can already do it themselves.

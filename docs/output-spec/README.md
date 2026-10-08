@@ -136,6 +136,7 @@ Every entry MUST also expose its lifecycle:
 | `is_withdrawn` | boolean | Whether ISO has withdrawn this entry's code. |
 | `assigned_earliest`, `assigned_latest` | maybe a date each | The range of days on which ISO assigned the code to this entry. |
 | `withdrawn_earliest`, `withdrawn_latest` | maybe a date each | The range of days on which ISO withdrew it. Both absent for active entries. |
+| `recorded_since` | a date | The earliest date from which the library's sources account for this code's status continuously. Before it, `written_at` checks report `UNRECORDED` ([§6.7](#67-checking-against-when-a-value-was-written)). |
 
 Dates in the library's history are known to varying precision, so each is exposed as a range of days rather than a
 single date:
@@ -243,7 +244,7 @@ Each library MUST expose, as constants in its root namespace:
 | `source_name`    | `Debian iso-codes` |
 | `source_version` | `4.20.1` |
 | `source_license` | `LGPL-2.1-or-later` |
-| `history_recorded_since`, per standard | the date the library's history is complete from ([§6.7](#67-checking-against-when-a-value-was-written)) |
+| `standard_published`, per standard | when ISO first published the standard, as a date range: ISO 3166-1 in 1974, ISO 3166-2 in 1998-12 ([§6.7](#67-checking-against-when-a-value-was-written)) |
 
 ## 6. Ambiguities, canonical form and strictness
 
@@ -436,15 +437,20 @@ Every binding MUST generate `HistoryState` with exactly these members, in this o
 | `OTHER` | The code meant a different entry, valid at the time. |
 | `WITHDRAWN` | The code meant nothing: its previous holder had been withdrawn. |
 | `UNASSIGNED` | The code meant nothing: it had never been assigned. |
-| `UNRECORDED` | `written_at` is before the library's recorded history for this standard begins. Always reported alone. |
+| `UNRECORDED` | `written_at` is before the code's `recorded_since` ([§5.1](#51-field-accessors)): the library has no evidence about the code then. Always reported alone. |
+| `PREDATES_STANDARD` | `written_at` is before ISO first published the standard, so no code of that standard meant anything. Always reported alone. Almost always means `written_at` itself is wrong. |
 
 The check produces the **set of states the code could have been in** on `written_at`:
 
 1. Each code has a timeline of segments: unassigned, then held by an entry, possibly withdrawn, possibly held by
    another entry, and so on. Each boundary between segments has a date range ([§5.1](#51-field-accessors)).
-2. If `written_at` is before the standard's `history_recorded_since` date ([§5.5](#55-dataset-information)), the
-   result is `{UNRECORDED}`.
-3. Otherwise, the result is the set of states of every segment `written_at` could fall in, taking every possible
+2. If `written_at` is certainly before the standard was first published (`standard_published`,
+   [§5.5](#55-dataset-information)), the result is `{PREDATES_STANDARD}`. If it falls within the publication date's
+   range (e.g. December 1998 for ISO 3166-2), `PREDATES_STANDARD` is one of the possible states, alongside the
+   states step 4 gives.
+3. Otherwise, if `written_at` is before the code's `recorded_since`, the result is `{UNRECORDED}`. This is per code,
+   because how far back the evidence goes differs by code.
+4. Otherwise, the result is the set of states of every segment `written_at` could fall in, taking every possible
    date of every boundary within its range (keeping the boundaries in order). A segment held by the matched entry
    gives `SAME`; held by any other entry, `OTHER`; a gap after a holder, `WITHDRAWN`; before any holder,
    `UNASSIGNED`.
@@ -461,6 +467,9 @@ segments. Each pair arises from one boundary with an imprecise date:
 | `{OTHER, SAME}` | The code passed directly from another holder to the matched entry on an imprecise date. |
 | `{UNASSIGNED, WITHDRAWN}` | Never alone: a holder lies between them, so its state is always in the set too. |
 
+A code can return to the **same** holder after a gap. ISO withdrew `BS-NP` (New Providence) in 2010 and assigned
+it again to the same region in 2018. Both periods give `SAME`, and the gap gives `WITHDRAWN`.
+
 Wider ranges spanning several boundaries give larger sets.
 
 #### Policy
@@ -471,14 +480,14 @@ in this order. Each passes everything the previous one passes:
 | `HistoryPolicy` | Passes when the states are | In words |
 |-----------------|----------------------------|----------|
 | `EXACT` | exactly `{SAME}` | Only a certain, unchanged meaning. |
-| `STRICT` | `{SAME}` or `{UNRECORDED}` | Missing records are acceptable; anything else isn't. |
+| `STRICT` | `{SAME}` or `{UNRECORDED}` | Missing records are acceptable; anything else, including `PREDATES_STANDARD`, isn't. |
 | `PESSIMISTIC` (default) | any set without `OTHER` | Fail on any possible change of meaning. |
 | `OPTIMISTIC` | anything except exactly `{OTHER}` | Fail only on a certain change of meaning. |
 | `PERMISSIVE` | anything | Never fail; just report. |
 
 `PESSIMISTIC` is the default because `OTHER` is the only state that means the value silently changed meaning.
-`WITHDRAWN` and `UNASSIGNED` mean the value was invalid when written, which is equally likely to be a wrong
-`written_at` as wrong data, so by default they don't fail. `{UNRECORDED}` contains no `OTHER` and passes
+`WITHDRAWN`, `UNASSIGNED` and `PREDATES_STANDARD` mean the value was invalid when written, which is at least as
+likely to be a wrong `written_at` as wrong data, so by default they don't fail. `{UNRECORDED}` contains no `OTHER` and passes
 `PESSIMISTIC` (it must, since `STRICT` passes it).
 
 `HistoryPolicy.STRICT` is unrelated to the `STRICT` strictness preset ([§6.3](#63-strictness)); they're different
@@ -497,7 +506,12 @@ Matching with `STRICT` plus `WITHDRAWN`, so withdrawn codes match. ✓ passes, �
 | `CS` (Serbia and Montenegro; was Czechoslovakia until 1993) | 1990-01-01 | `{OTHER}` | ✗ | ✗ | ✗ | ✗ | ✓ |
 | a withdrawn code whose withdrawal is known only as "no later than 2021-10-27" | 2020-05-01 | `{SAME, WITHDRAWN}` | ✗ | ✗ | ✓ | ✓ | ✓ |
 | a code that passed directly between two holders in a known year | mid-year | `{OTHER, SAME}` | ✗ | ✗ | ✗ | ✓ | ✓ |
-| any code | before `history_recorded_since` | `{UNRECORDED}` | ✗ | ✓ | ✓ | ✓ | ✓ |
+| `BS-NP` (recorded since 2004-02-22) | 1997-01-01 | `{PREDATES_STANDARD}` | ✗ | ✗ | ✓ | ✓ | ✓ |
+| `BS-NP` | 2001-01-01 | `{UNRECORDED}` | ✗ | ✓ | ✓ | ✓ | ✓ |
+| `BS-NP` | 2005-01-01 | `{SAME}` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `BS-NP` (withdrawn 2010-06-30, reassigned to the same region 2018-11-26) | 2012-01-01 | `{WITHDRAWN}` | ✗ | ✗ | ✓ | ✓ | ✓ |
+| `BS-NP` | 2019-01-01 | `{SAME}` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `US-CA` (recorded since 2004-02-22) | 2001-01-01 | `{UNRECORDED}` | ✗ | ✓ | ✓ | ✓ | ✓ |
 
 The library records only *when* earlier holders held a code, nothing else about them. It reports that the meaning
 changed, not what it used to be. Like all of the library's history, this is best-effort

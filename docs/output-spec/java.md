@@ -61,7 +61,7 @@ The class types MUST NOT implement `Comparable`.
 - Accessors are record-style methods without a `get` prefix: `alpha2()`, `englishName()`.
 - Required fields return `String`, never `null`.
 - Lifecycle: `boolean isWithdrawn()`, and `Optional<LocalDate>` for `assignedEarliest()`, `assignedLatest()`,
-  `withdrawnEarliest()` and `withdrawnLatest()` (`java.time.LocalDate`).
+  `withdrawnEarliest()` and `withdrawnLatest()` (`java.time.LocalDate`), and `LocalDate recordedSince()`.
 - Optional fields return `Optional<String>`, never `null` and never `Optional.of("")`.
 - Fields are `private final String`. Optional fields store `null` internally, wrapped on access.
 
@@ -149,7 +149,7 @@ Usage: `Country.parseAlpha2(input, Strictness.allowing(Relaxation.ASCII_CASE))`,
 private. It implements `equals`/`hashCode` on the allowed set and `toString` as, e.g., `Strictness[ASCII_CASE, DASH]`.
 
 ```java
-public enum HistoryState { SAME, OTHER, WITHDRAWN, UNASSIGNED, UNRECORDED }
+public enum HistoryState { SAME, OTHER, WITHDRAWN, UNASSIGNED, UNRECORDED, PREDATES_STANDARD }
 public enum HistoryPolicy { EXACT, STRICT, PESSIMISTIC, OPTIMISTIC, PERMISSIVE }
 
 public record HistoryCheck(Set<HistoryState> states, HistoryPolicy policy, boolean passed) {}
