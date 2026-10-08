@@ -172,8 +172,8 @@ parents.
 
 Missing dates are explicit (`unknown`), never guessed silently. Every date is stored as an interval: an exact day,
 a coarser precision (`1993`), or only a latest possible date (the first source release showing the change).
-Generated libraries use these intervals to answer `written_at` checks (output spec §6.7) and report `UNDETERMINED`
-when an interval is too wide.
+Generated libraries expose these intervals as earliest/latest dates and use them for `written_at` checks
+(output spec §6.7), which report every state an imprecise date allows.
 
 Each code also records its earlier holders' validity intervals (not their names or other values), so libraries
 can tell that a code's meaning changed. Telling a genuine reassignment (`CS`: Czechoslovakia, then Serbia and
@@ -222,8 +222,16 @@ Decided:
 - Withdrawn codes are kept as best-effort history (§9), not dropped.
 - Withdrawn entries stay in the generated API as members, flagged and matchable through the `WITHDRAWN`
   relaxation (output spec §4.1, §6). No replacement hints.
+- Dates are exposed as earliest/latest ranges, never collapsed to a guess (output spec §5.1).
+- `written_at` checks report the set of possible states (`SAME`, `OTHER`, `WITHDRAWN`, `UNASSIGNED`, or
+  `UNRECORDED`) and pass or fail by a `HistoryPolicy` dial, default `PESSIMISTIC` (output spec §6.7).
+- No grace-period logic in the library; callers apply their own using the date ranges.
 
 Open:
 
-1. **A finer-grained lifecycle dial** than the on/off `WITHDRAWN` relaxation, e.g. "withdrawn since a given date".
-   Deferred until there's a use for it.
+1. **Where recorded history starts** (`history_recorded_since`, output spec §5.5), per standard. Before that date a
+   `written_at` check reports `UNRECORDED`. Candidates for ISO 3166-2: ISO's first 3166-2 edition (believed 1998,
+   before which every subdivision code was unassigned), the earliest dated subdivision entry in the change log
+   (2000-06-21), or our first source snapshots (2015-16). Needs measuring how complete the change log is.
+
+2. **A grace-period convenience** on top of the withdrawal date ranges. Callers can already do it themselves.

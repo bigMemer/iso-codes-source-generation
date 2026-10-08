@@ -60,7 +60,8 @@ The class types MUST NOT implement `Comparable`.
 
 - Accessors are record-style methods without a `get` prefix: `alpha2()`, `englishName()`.
 - Required fields return `String`, never `null`.
-- Lifecycle: `boolean isWithdrawn()` and `Optional<String> withdrawnOn()`.
+- Lifecycle: `boolean isWithdrawn()`, and `Optional<LocalDate>` for `assignedEarliest()`, `assignedLatest()`,
+  `withdrawnEarliest()` and `withdrawnLatest()` (`java.time.LocalDate`).
 - Optional fields return `Optional<String>`, never `null` and never `Optional.of("")`.
 - Fields are `private final String`. Optional fields store `null` internally, wrapped on access.
 
@@ -83,20 +84,27 @@ public static Match<Country> parseAlpha2Detailed(String alpha2, Strictness stric
 
 public static boolean isValidAlpha2(String alpha2);
 public static boolean isValidAlpha2(String alpha2, Strictness strictness);
-public static Validation isValidAlpha2Detailed(String alpha2);
-public static Validation isValidAlpha2Detailed(String alpha2, Strictness strictness);
-public static Validation isValidAlpha2Detailed(String alpha2, Strictness strictness, LocalDate writtenAt);
+public static Validation<Country> isValidAlpha2Detailed(String alpha2);
+public static Validation<Country> isValidAlpha2Detailed(String alpha2, Strictness strictness);
 ```
 
-Every detailed operation has the same three overloads: input only; input and strictness; input, strictness and
-`java.time.LocalDate writtenAt`. Shown above for `isValidAlpha2Detailed` only.
+Every operation, plain and detailed, also has two more overloads for history checks:
+
+```java
+public static Optional<Country> fromAlpha2(String alpha2, Strictness strictness, LocalDate writtenAt);
+public static Optional<Country> fromAlpha2(String alpha2, Strictness strictness, LocalDate writtenAt,
+                                           HistoryPolicy history);   // default HistoryPolicy.PESSIMISTIC
+```
+
+shown here for `fromAlpha2` only. `parseAlpha2` with a `writtenAt` can also throw `MeaningChangedException`.
 
 - The one-argument forms are equivalent to passing `Strictness.STRICT`.
 - `all()` returns an unmodifiable `List` of active entries, and `allIncludingWithdrawn()` all of them (from
   `List.copyOf` or equivalent). Both exist on `enum` types as well as the class types, so the API is uniform. On
   `enum` types, `values()` remains available and, as the language defines it, includes withdrawn constants.
 - Withdrawn `enum` constants carry `@Deprecated` (with `forRemoval = false`, since they're never removed) and a
-  Javadoc `@deprecated` tag naming the withdrawal date when known: `@deprecated Withdrawn by ISO on 2006-09-26.`
+  Javadoc `@deprecated` tag giving the withdrawal date as precisely as known: `@deprecated Withdrawn by ISO on
+  2006-09-26.`, `… in 1993.`, `… by 2021-10-27.`, or `… (date unknown).`
 
 ### Formatting
 
@@ -141,14 +149,17 @@ Usage: `Country.parseAlpha2(input, Strictness.allowing(Relaxation.ASCII_CASE))`,
 private. It implements `equals`/`hashCode` on the allowed set and `toString` as, e.g., `Strictness[ASCII_CASE, DASH]`.
 
 ```java
-public enum Finding { NOT_YET_ASSIGNED, ALREADY_WITHDRAWN, WITHDRAWN_SINCE, REASSIGNED_SINCE, UNDETERMINED }
+public enum HistoryState { SAME, OTHER, WITHDRAWN, UNASSIGNED, UNRECORDED }
+public enum HistoryPolicy { EXACT, STRICT, PESSIMISTIC, OPTIMISTIC, PERMISSIVE }
 
-public record Match<T>(T entry, Set<Relaxation> relaxations, Set<Finding> findings) {}
-public record Validation(boolean isValid, Set<Relaxation> relaxations, Set<Finding> findings) {}
+public record HistoryCheck(Set<HistoryState> states, HistoryPolicy policy, boolean passed) {}
+public record Match<T>(T entry, Set<Relaxation> relaxations, Optional<HistoryCheck> history) {}
+public record Validation<T>(boolean isValid, Optional<Match<T>> match) {}
 ```
 
-- Both records' canonical constructors reject `null` and copy both sets into unmodifiable `EnumSet` views.
-  `Validation` also rejects non-empty sets when `isValid` is false.
+- The records' canonical constructors reject `null` and copy sets into unmodifiable `EnumSet` views.
+  `HistoryCheck` rejects a `passed` value inconsistent with `policy` and `states`; `Validation` rejects
+  `isValid == true` without a passing match.
 - Only the library constructs them. Their constructors are public because records require it, but callers have no
   reason to.
 
@@ -164,18 +175,29 @@ Implementation notes:
 ## 7. Failure
 
 ```java
-public final class UnknownCodeException extends IllegalArgumentException {
+public abstract sealed class CodeRejectedException extends IllegalArgumentException
+        permits UnknownCodeException, MeaningChangedException {
     public String standard();       // "3166-1"
     public String field();          // "alpha_2"
     public String input();          // exactly as passed in
     public Strictness strictness();
 }
+
+public final class UnknownCodeException extends CodeRejectedException {}
+
+public final class MeaningChangedException extends CodeRejectedException {
+    public Object entry();          // the entry that matched today; Object because Java forbids generic exceptions
+    public LocalDate writtenAt();
+    public HistoryCheck history();
+}
+
 ```
 
-- Unchecked, extending `IllegalArgumentException` as the spec recommends. Callers who want to tell it apart from
-  their own argument bugs catch `UnknownCodeException` specifically.
+- Unchecked, extending `IllegalArgumentException` as the spec recommends. Callers catch `CodeRejectedException` for
+  any rejected code, or `UnknownCodeException` / `MeaningChangedException` specifically, without catching their own
+  argument bugs.
 - Message: `"XX" is not a known ISO 3166-1 alpha_2 code`, with the input escaped as a Java string literal.
-- A `null` input, `null` strictness or `null` relaxation to any operation throws `NullPointerException` from
+- A `null` input, strictness, relaxation, `writtenAt` (in the overloads that take one) or `HistoryPolicy` to any operation throws `NullPointerException` from
   `Objects.requireNonNull(value, "<parameter name>")`. Lookups MUST NOT pass `null` to `Map.get`, which would
   quietly return "absent".
 
@@ -205,6 +227,6 @@ What the current emitter output (`intermediate-model` branch) is missing, agains
 | `Country.toString()` isn't explicitly overridden. It's correct today only because constant names equal `alpha_2` codes. | §5.4 |
 | `IsoCodes` lacks `SOURCE_NAME` and `SOURCE_LICENSE`. | §5.5 |
 | No `Automatic-Module-Name` in the JAR manifest. | §1 here |
-| No withdrawn entries, `isWithdrawn()`, `withdrawnOn()`, `allIncludingWithdrawn()`, `WITHDRAWN`, `Finding` or `writtenAt`. Needs the aggregated sources first. | §4.1, §6 |
+| No withdrawn entries, lifecycle date accessors, `allIncludingWithdrawn()`, `WITHDRAWN`, history checks or `MeaningChangedException`. Needs the aggregated sources first. | §4.1, §5.1, §6.7, §7.1a |
 
 Already conforming: field accessors return canonical forms, and `Subdivision.toString()` returns the primary code.

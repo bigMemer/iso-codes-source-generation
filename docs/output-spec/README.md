@@ -134,7 +134,21 @@ Every entry MUST also expose its lifecycle:
 | Accessor | Type | Meaning |
 |----------|------|---------|
 | `is_withdrawn` | boolean | Whether ISO has withdrawn this entry's code. |
-| `withdrawn_on` | maybe a string | When, as an ISO 8601 date at whatever precision is known: `1993`, `1993-06`, `1993-06-15`. Absent for active entries, and for withdrawn entries whose date is unknown. |
+| `assigned_earliest`, `assigned_latest` | maybe a date each | The range of days on which ISO assigned the code to this entry. |
+| `withdrawn_earliest`, `withdrawn_latest` | maybe a date each | The range of days on which ISO withdrew it. Both absent for active entries. |
+
+Dates in the library's history are known to varying precision, so each is exposed as a range of days rather than a
+single date:
+
+| Known as | `…_earliest` | `…_latest` |
+|----------|--------------|------------|
+| An exact day, e.g. 2006-09-26 | 2006-09-26 | 2006-09-26 |
+| A year, e.g. 1993 | 1993-01-01 | 1993-12-31 |
+| Only "no later than" a source release, e.g. 2021-10-27 | absent | 2021-10-27 |
+| Unknown | absent | absent |
+
+The library never collapses a range into a single guessed date. Callers who want to apply their own rules, e.g. a
+grace period after withdrawal, compare their own clock against whichever end suits them.
 
 A withdrawn entry's other fields hold their last known values.
 
@@ -168,31 +182,32 @@ Names below are concept names. Bindings spell them in their own convention (`fro
 
 | Operation | Returns | Behaviour |
 |-----------|---------|-----------|
-| `from_f(input, strictness = STRICT)` | maybe an entry | The entry whose `f` matches `input` under `strictness` ([§6](#6-ambiguities-canonical-form-and-strictness)), or absent. Never fails for non-null input. |
-| `parse_f(input, strictness = STRICT)` | an entry | Same match, but no match is a failure ([§7](#7-failure)). |
-| `is_valid_f(input, strictness = STRICT)` | boolean | Whether a match exists. |
-| `from_f_detailed(input, strictness = STRICT, written_at = absent)` | maybe a `Match` | As `from_f`, plus the relaxations the match needed and, if `written_at` is given, history findings ([§6.7](#67-checking-against-when-a-value-was-written)). |
-| `parse_f_detailed(input, strictness = STRICT, written_at = absent)` | a `Match` | As `parse_f`, plus the same. |
-| `is_valid_f_detailed(input, strictness = STRICT, written_at = absent)` | a `Validation` | As `is_valid_f`, plus the same. |
+| `from_f(input, strictness = STRICT, written_at = absent, history = PESSIMISTIC)` | maybe an entry | The entry whose `f` matches `input` under `strictness` ([§6](#6-ambiguities-canonical-form-and-strictness)), or absent. If `written_at` is given, also absent when the history check fails ([§6.7](#67-checking-against-when-a-value-was-written)). Never fails for non-null input. |
+| `parse_f(…same…)` | an entry | Same, but no match is an `UnknownCode` failure and a failed history check is a `MeaningChanged` failure ([§7](#7-failure)). |
+| `is_valid_f(…same…)` | boolean | Whether `from_f` would return an entry. |
+| `from_f_detailed(…same…)` | maybe a `Match` | Present whenever the code matches today, **even if the history check fails**, so the caller can see why. |
+| `parse_f_detailed(…same…)` | a `Match` | As `from_f_detailed`, but no match is an `UnknownCode` failure. A failed history check is not a failure here; it's reported in the `Match`. |
+| `is_valid_f_detailed(…same…)` | a `Validation` | As `is_valid_f`, with the details. |
 
 The result shapes:
 
 | Concept name | Fields | Rules |
 |--------------|--------|-------|
-| `Match` | `entry`: the matched entry; `relaxations`: set of `Relaxation`; `findings`: set of `Finding` | `relaxations` is exactly the set of relaxations that were materially needed ([§6.4](#64-matching-algorithm)). Empty means the input was already canonical. `findings` is empty unless `written_at` was given. |
-| `Validation` | `is_valid`: boolean; `relaxations`: set of `Relaxation`; `findings`: set of `Finding` | When `is_valid` is false, both sets are empty. |
+| `Match` | `entry`: the matched entry; `relaxations`: set of `Relaxation`; `history`: maybe a `HistoryCheck` | `relaxations` is exactly the set of relaxations that were materially needed ([§6.4](#64-matching-algorithm)). Empty means the input was already canonical. `history` is present exactly when `written_at` was given. |
+| `HistoryCheck` | `states`: set of `HistoryState`; `policy`: the `HistoryPolicy` applied; `passed`: boolean | See [§6.7](#67-checking-against-when-a-value-was-written). |
+| `Validation` | `is_valid`: boolean; `match`: maybe a `Match` | `match` is present whenever the code matches today. `is_valid` is true when it's present and its history check, if any, passed. |
 
-`Relaxation` ([§6.2](#62-ambiguities)) and `Finding` ([§6.7](#67-checking-against-when-a-value-was-written)) are
-enumerations. Their sets MUST be immutable and MUST iterate in declaration order.
+`Relaxation` ([§6.2](#62-ambiguities)), `HistoryState` and `HistoryPolicy` ([§6.7](#67-checking-against-when-a-value-was-written)) are
+enumerations. Sets of them MUST be immutable and MUST iterate in declaration order.
 
-`written_at` is a calendar date (no time, no time zone). It's accepted only by the detailed forms, so the plain
-forms keep their simple meaning.
+`written_at` is a calendar date (no time, no time zone). `history` is ignored when `written_at` is absent.
 
-All six MUST agree. For every input `x` and strictness `s`:
+All six MUST agree. For the same arguments:
 
-- `is_valid_f(x, s)` ⇔ `from_f(x, s)` is present ⇔ `parse_f(x, s)` succeeds ⇔ `is_valid_f_detailed(x, s).is_valid`
-  ⇔ `from_f_detailed(x, s)` is present ⇔ `parse_f_detailed(x, s)` succeeds;
-- when they succeed, they agree on the entry, and all three detailed forms report the same `relaxations`.
+- `is_valid_f` ⇔ `from_f` is present ⇔ `parse_f` succeeds ⇔ `is_valid_f_detailed(…).is_valid`;
+- `from_f_detailed` is present ⇔ `parse_f_detailed` succeeds ⇔ `is_valid_f_detailed(…).match` is present
+  ⇔ the code matches today, regardless of history;
+- every form that returns an entry or a `Match` agrees on the entry, `relaxations` and `history`.
 
 `strictness` MUST be optional, defaulting to `STRICT`. In languages without default arguments, provide both forms
 (overloads, or a separately named variant documented by the binding).
@@ -228,6 +243,7 @@ Each library MUST expose, as constants in its root namespace:
 | `source_name`    | `Debian iso-codes` |
 | `source_version` | `4.20.1` |
 | `source_license` | `LGPL-2.1-or-later` |
+| `history_recorded_since`, per standard | the date the library's history is complete from ([§6.7](#67-checking-against-when-a-value-was-written)) |
 
 ## 6. Ambiguities, canonical form and strictness
 
@@ -397,58 +413,100 @@ the consumer's job, and the library carries no hints about what replaced a withd
    | Result | Meaning |
    |--------|---------|
    | Match, `WITHDRAWN` not reported | Still valid. |
-   | Match, `WITHDRAWN` reported | Was valid, has since been withdrawn: needs the consumer's own migration. `withdrawn_on` says since when, if known. |
+   | Match, `WITHDRAWN` reported | Was valid, has since been withdrawn: needs the consumer's own migration. `withdrawn_earliest`/`withdrawn_latest` say since when, as far as known. |
    | No match | Never a known code, e.g. a typo, or a code withdrawn before the library's history begins. |
 
-If the consumer knows when each value was stored, passing it as `written_at` adds history findings to the scan
-([§6.7](#67-checking-against-when-a-value-was-written)): whether the code was already invalid when stored, and
-whether it has since been given to something else. Without `written_at`, a code ISO reassigned after the value was
-stored scans as valid even though its meaning changed.
+If the consumer knows when each value was stored, passing it as `written_at` also checks whether the code meant
+something else at that time ([§6.7](#67-checking-against-when-a-value-was-written)). Without `written_at`, a code ISO
+reassigned after the value was stored scans as valid even though its meaning changed.
 
 ### 6.7 Checking against when a value was written
 
-Given `written_at`, the detailed operations compare the matched entry's code with its history at that date. This
-doesn't change which entry matches (matching is always against the library's current state, [§6.4](#64-matching-algorithm));
-it only adds `Finding`s.
+`written_at` answers one question: **did this code mean something different, but valid, when it was written?**
+Matching itself is unchanged (it's always against the library's current state, [§6.4](#64-matching-algorithm)); the
+history check runs on the entry that matched.
 
-Every binding MUST generate `Finding` with exactly these members, in this order:
+#### States
 
-| `Finding` member | Reported when |
-|------------------|---------------|
-| `NOT_YET_ASSIGNED` | `written_at` is before the code took effect for the matched entry. The value was invalid when written. |
-| `ALREADY_WITHDRAWN` | `written_at` is on or after the matched entry's withdrawal. The value was invalid when written. |
-| `WITHDRAWN_SINCE` | The code was valid for the matched entry at `written_at` and has been withdrawn since. |
-| `REASSIGNED_SINCE` | At `written_at` the code belonged to a different holder than the matched entry. The value's meaning has changed. |
-| `UNDETERMINED` | The library's dates aren't precise enough to tell which of the above, if any, applies. |
+Every binding MUST generate `HistoryState` with exactly these members, in this order:
 
-No findings means the code was valid for the matched entry at `written_at` and still is.
+| `HistoryState` | Meaning at `written_at` |
+|----------------|-------------------------|
+| `SAME` | The code meant the matched entry. |
+| `OTHER` | The code meant a different entry, valid at the time. |
+| `WITHDRAWN` | The code meant nothing: its previous holder had been withdrawn. |
+| `UNASSIGNED` | The code meant nothing: it had never been assigned. |
+| `UNRECORDED` | `written_at` is before the library's recorded history for this standard begins. Always reported alone. |
 
-**Dates are intervals.** Each date in the library's history is known only to a precision: an exact day from ISO's
-change notices, a year (`1993`), or only a latest possible date (the first source release that showed the change).
-A binding MUST treat each as the interval of days it could be. A finding is reported only if it holds for every
-possible day in those intervals. If the possible answers differ, the result is exactly `{UNDETERMINED}`. Bindings
-MUST NOT pick the most likely answer.
+The check produces the **set of states the code could have been in** on `written_at`:
 
-**Holders.** `REASSIGNED_SINCE` needs to know a code's earlier holders, which aren't entries
-([§4.1](#41-withdrawn-entries)). The library records their validity intervals, nothing else about them: it says
-*that* the meaning changed, not what it used to be.
+1. Each code has a timeline of segments: unassigned, then held by an entry, possibly withdrawn, possibly held by
+   another entry, and so on. Each boundary between segments has a date range ([§5.1](#51-field-accessors)).
+2. If `written_at` is before the standard's `history_recorded_since` date ([§5.5](#55-dataset-information)), the
+   result is `{UNRECORDED}`.
+3. Otherwise, the result is the set of states of every segment `written_at` could fall in, taking every possible
+   date of every boundary within its range (keeping the boundaries in order). A segment held by the matched entry
+   gives `SAME`; held by any other entry, `OTHER`; a gap after a holder, `WITHDRAWN`; before any holder,
+   `UNASSIGNED`.
 
-| Input | `written_at` | Strictness | Entry | Findings |
-|-------|--------------|------------|-------|----------|
-| `"DE"` | 2020-01-01 | `STRICT` | DE | {} |
-| `"SS"` (South Sudan, 2011) | 2005-01-01 | `STRICT` | SS | {`NOT_YET_ASSIGNED`} |
-| `"IN-OR"` | 2020-01-01 | `STRICT+W` | IN-OR | {`WITHDRAWN_SINCE`} |
-| `"IN-OR"` | 2025-01-01 | `STRICT+W` | IN-OR | {`ALREADY_WITHDRAWN`} |
-| `"CS"` | 1990-01-01 | `STRICT+W` | CS (Serbia and Montenegro) | {`REASSIGNED_SINCE`} (it was Czechoslovakia then) |
-| `"CS"` | 2005-01-01 | `STRICT+W` | CS (Serbia and Montenegro) | {`WITHDRAWN_SINCE`} |
-| a code whose introduction date is only bounded by a source release | inside the bound | any | the entry | {`UNDETERMINED`} |
+A single state is certain. Several states mean the dates can't tell them apart; they're always neighbouring
+segments. Each pair arises from one boundary with an imprecise date:
 
-The library's history is best-effort ([§4.1](#41-withdrawn-entries)), so findings are too. `UNDETERMINED` is the
-library being honest about that, not an error.
+| States | Arises when |
+|--------|-------------|
+| `{UNASSIGNED, SAME}` | The matched entry's assignment date is imprecise. |
+| `{UNASSIGNED, OTHER}` | An earlier holder's assignment date is imprecise. |
+| `{SAME, WITHDRAWN}` | The matched entry's withdrawal date is imprecise, or its assignment after a gap is. |
+| `{OTHER, WITHDRAWN}` | An earlier holder's withdrawal date is imprecise. |
+| `{OTHER, SAME}` | The code passed directly from another holder to the matched entry on an imprecise date. |
+| `{UNASSIGNED, WITHDRAWN}` | Never alone: a holder lies between them, so its state is always in the set too. |
+
+Wider ranges spanning several boundaries give larger sets.
+
+#### Policy
+
+Whether the check passes is set by a `HistoryPolicy`, which every binding MUST generate with exactly these members,
+in this order. Each passes everything the previous one passes:
+
+| `HistoryPolicy` | Passes when the states are | In words |
+|-----------------|----------------------------|----------|
+| `EXACT` | exactly `{SAME}` | Only a certain, unchanged meaning. |
+| `STRICT` | `{SAME}` or `{UNRECORDED}` | Missing records are acceptable; anything else isn't. |
+| `PESSIMISTIC` (default) | any set without `OTHER` | Fail on any possible change of meaning. |
+| `OPTIMISTIC` | anything except exactly `{OTHER}` | Fail only on a certain change of meaning. |
+| `PERMISSIVE` | anything | Never fail; just report. |
+
+`PESSIMISTIC` is the default because `OTHER` is the only state that means the value silently changed meaning.
+`WITHDRAWN` and `UNASSIGNED` mean the value was invalid when written, which is equally likely to be a wrong
+`written_at` as wrong data, so by default they don't fail. `{UNRECORDED}` contains no `OTHER` and passes
+`PESSIMISTIC` (it must, since `STRICT` passes it).
+
+`HistoryPolicy.STRICT` is unrelated to the `STRICT` strictness preset ([§6.3](#63-strictness)); they're different
+types.
+
+#### Examples
+
+Matching with `STRICT` plus `WITHDRAWN`, so withdrawn codes match. ✓ passes, ✗ fails.
+
+| Input | `written_at` | States | `EXACT` | `STRICT` | `PESSIMISTIC` | `OPTIMISTIC` | `PERMISSIVE` |
+|-------|--------------|--------|---|---|---|---|---|
+| `DE` | 2020-01-01 | `{SAME}` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `IN-OR` (withdrawn 2023-11-23) | 2020-01-01 | `{SAME}` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `GT-AV` (withdrawn 2021-11-25) | 2022-03-01 | `{WITHDRAWN}` | ✗ | ✗ | ✓ | ✓ | ✓ |
+| `SS` (assigned 2011-08-09) | 2005-01-01 | `{UNASSIGNED}` | ✗ | ✗ | ✓ | ✓ | ✓ |
+| `CS` (Serbia and Montenegro; was Czechoslovakia until 1993) | 1990-01-01 | `{OTHER}` | ✗ | ✗ | ✗ | ✗ | ✓ |
+| a withdrawn code whose withdrawal is known only as "no later than 2021-10-27" | 2020-05-01 | `{SAME, WITHDRAWN}` | ✗ | ✗ | ✓ | ✓ | ✓ |
+| a code that passed directly between two holders in a known year | mid-year | `{OTHER, SAME}` | ✗ | ✗ | ✗ | ✓ | ✓ |
+| any code | before `history_recorded_since` | `{UNRECORDED}` | ✗ | ✓ | ✓ | ✓ | ✓ |
+
+The library records only *when* earlier holders held a code, nothing else about them. It reports that the meaning
+changed, not what it used to be. Like all of the library's history, this is best-effort
+([§4.1](#41-withdrawn-entries)).
 
 ## 7. Failure
 
-There are exactly two kinds of failure, and bindings MUST keep them distinguishable.
+Failures fall into two kinds, rejected data ([§7.1](#71-unknown-code), [§7.1a](#71a-meaning-changed)) and
+programming errors ([§7.2](#72-programming-errors)), and bindings MUST keep them distinguishable.
 
 ### 7.1 Unknown code
 
@@ -468,6 +526,18 @@ a bug in the caller.
 
 The `from_` and `is_valid_` operations MUST NOT report unknown codes as failures; they return absent and false.
 
+### 7.1a Meaning changed
+
+Raised only by `parse_f` when the code matches today but the history check fails ([§6.7](#67-checking-against-when-a-value-was-written)).
+
+- Concept name **`MeaningChanged`**. It MUST carry everything `UnknownCode` carries, plus the matched entry,
+  `written_at`, the `HistoryPolicy` and the set of `HistoryState`s.
+- Message, SHOULD: `"<input>" may have meant something else on <written_at> (states: <states>)`.
+- Where the language uses exceptions, `UnknownCode` and `MeaningChanged` SHOULD share a common parent type for
+  "rejected code", so callers can catch both at once.
+
+`parse_f_detailed` doesn't raise it; it returns the `Match`, whose `history` says the check failed.
+
 ### 7.2 Programming errors
 
 Misusing the API is a bug in the caller and is reported with the language's standard mechanism for invalid
@@ -476,7 +546,7 @@ arguments, never as `UnknownCode`:
 - **Null input.** In languages where a string argument can be null, every operation (including `from_` and
   `is_valid_`) MUST reject null with the language's standard null/argument error. Null is not "an unknown code":
   `is_valid_f(null)` fails, it does not return false.
-- **Null strictness**, or a strictness containing null, is rejected the same way.
+- **Null strictness**, or a strictness containing null, is rejected the same way, as is a null `history` policy.
 
 Any other string, including empty, whitespace-only, very long or non-ASCII strings, is valid input that simply may
 not match.
@@ -537,7 +607,9 @@ Candidates for later versions, deliberately unspecified for now:
 - **More relaxations** for the non-relaxable ambiguities in [§6.2](#62-ambiguities), notably `separator`
   (`US_CA`) and `non_ascii_lookalike` (fullwidth letters).
 - **Matching as of a date**, i.e. resolving a code to the holder it had at `written_at` (making earlier holders
-  entries). Spec version 1 only reports, through `Finding`s, that the holder changed.
+  entries). Spec version 1 only reports that the holder changed.
+- **A grace-period convenience**, e.g. "accept codes withdrawn in the last six months, relative to a date I pass
+  in". Callers can already do this with the withdrawal date ranges ([§5.1](#51-field-accessors)).
 - **Translated names.** iso-codes ships gettext translations; the model doesn't carry them.
 - **Other standards.** ISO 3166-3 (former countries), ISO 4217, ISO 15924 and ISO 639 were in an earlier draft and
   were removed when the scope narrowed to ISO 3166-1/2.
