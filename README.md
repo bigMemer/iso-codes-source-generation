@@ -6,6 +6,12 @@ This repo holds only the generator. The generated library lives in
 [bigMemer/iso-codes-java](https://github.com/bigMemer/iso-codes-java), which is what consumers depend on and what
 gets published to Maven Central. Generated code only reaches that repo through pull requests opened by this one.
 
+## Output specification
+
+What every generated library must look like and how it behaves, in any language, is defined in
+[docs/output-spec](docs/output-spec/README.md). Each output language has its own binding document there (currently
+[Java](docs/output-spec/java.md)), including a list of where the current output falls short.
+
 ## How it works
 
 ```

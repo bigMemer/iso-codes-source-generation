@@ -1,0 +1,172 @@
+# Java binding
+
+**Status:** partially conforming (see [§9](#9-conformance-gaps)). **Implements:**
+[generated library specification](README.md), spec version 1.
+
+This document maps the language-neutral spec onto Java. It only decides what the spec leaves to bindings; it
+doesn't repeat behaviour the spec already defines.
+
+## 1. Packaging
+
+- **Artifact:** `com.wwwdottheinternetdotcom:iso-codes:<source version>`, e.g. `4.20.1`. A re-release for the same
+  source version appends `-r<n>` starting at `-r2` (`4.20.1-r2`), which Maven orders after `4.20.1`.
+- **Language level:** compiled with `--release 17`. Generated code MAY use any Java 17 feature (records, pattern
+  matching for `instanceof`, switch expressions) and nothing newer.
+- **Module name:** the JAR MUST declare `Automatic-Module-Name: com.wwwdottheinternetdotcom.isocodes` in its
+  manifest.
+- **Dependencies:** none at runtime. No annotations from third-party libraries (no JSpecify, no JetBrains
+  annotations).
+
+## 2. Naming
+
+| Spec concept | Java |
+|--------------|------|
+| Root namespace | package `com.wwwdottheinternetdotcom.isocodes` (the generator's `basePackage`) |
+| Standard family namespace | sub-package: `.iso3166`, `.iso4217`, `.iso15924`, `.iso639` |
+| Type | concept name as is: `Country`, `LanguagePart2` |
+| Field `snake_case` id | `lowerCamelCase`: `alpha_2` → `alpha2`, `withdrawal_date` → `withdrawalDate` |
+| `name` field | `englishName()` |
+| Operation `from_f` / `parse_f` / `is_valid_f` | `fromAlpha2`, `parseAlpha2`, `isValidAlpha2` |
+| Member names | exactly the spec's rule: `DE`, `DEU`, `LATN`, `QAA_QTZ` |
+| Dataset constants | `IsoCodes.SOURCE_NAME`, `IsoCodes.VERSION`, `IsoCodes.SOURCE_LICENSE` |
+| Error type | `UnknownCodeException` |
+
+`IsoCodes.VERSION` keeps its existing name instead of `SOURCE_VERSION`, because it's already published API.
+
+## 3. Enumerations
+
+Standards whose entries fit in a Java `enum` MUST be generated as an `enum`. Currently that's every standard except:
+
+| Standard | Why | Representation |
+|----------|-----|----------------|
+| ISO 3166-2 `Subdivision` (5,000+ entries) | An enum's static initialiser and constant pool exceed the class-file limits (64 KiB per method, 65,535 constants). | `public final class` |
+| ISO 639-3 `Language` (7,900+ entries) | Same. | `public final class` |
+
+The class representation:
+
+- has no public or protected constructor, so consumers can't create instances;
+- creates every instance exactly once, from package-private holder classes (`SubdivisionData0`,
+  `SubdivisionData1`, ...) of at most 500 entries each, so `==` and `equals` agree;
+- implements `equals` and `hashCode` on the primary code, consistent with identity;
+- has no named members. `Subdivision.US_CA` doesn't exist; use `Subdivision.parseCode("US-CA")`. That's the spec's
+  permitted exception for large standards.
+
+Which representation a standard gets is decided by `JavaTarget` in the emitter, not by entry count at generation time,
+so a standard can't silently switch between `enum` and class when upstream data grows.
+
+`enum` types get `compareTo` and `values()` for free. Their declaration order is source order, as the spec requires.
+The class types MUST NOT implement `Comparable`.
+
+## 4. Accessors and absence
+
+- Accessors are record-style methods without a `get` prefix: `alpha2()`, `englishName()`.
+- Required fields return `String`, never `null`.
+- Optional fields return `Optional<String>`, never `null` and never `Optional.of("")`.
+- Fields are `private final String`. Optional fields store `null` internally, wrapped on access.
+
+## 5. Operations
+
+For a standard type `T` and a code field `f` (shown for `Country` and `alpha_2`):
+
+```java
+public static List<Country> all();
+
+public static Optional<Country> fromAlpha2(String alpha2);
+public static Optional<Country> fromAlpha2(String alpha2, Strictness strictness);
+
+public static Country parseAlpha2(String alpha2);                        // throws UnknownCodeException
+public static Country parseAlpha2(String alpha2, Strictness strictness); // throws UnknownCodeException
+
+public static boolean isValidAlpha2(String alpha2);
+public static boolean isValidAlpha2(String alpha2, Strictness strictness);
+```
+
+- The one-argument forms are equivalent to passing `Strictness.STRICT`.
+- `all()` returns an unmodifiable `List` (from `List.copyOf` or equivalent). It exists on `enum` types as well as the
+  class types, so the API is uniform. On `enum` types, `values()` remains available as usual.
+- `toString()` returns the canonical primary code. On `enum` types this means overriding `toString()`, since the
+  default returns the constant name, which differs for ISO 639 (`DEU` versus `deu`) and `qaa-qtz`. `name()` still
+  returns the constant name, as the language requires.
+
+## 6. Strictness
+
+A single public type in the root package:
+
+```java
+public record Strictness(
+        CaseMatching caseMatching,
+        DashMatching dashMatching,
+        WhitespaceHandling whitespace,
+        NumericPadding numericPadding) {
+
+    public static final Strictness STRICT = ...;   // every component exact
+    public static final Strictness LENIENT = ...;  // every component relaxed
+
+    public enum CaseMatching { EXACT, IGNORE_ASCII_CASE }
+    public enum DashMatching { HYPHEN_MINUS_ONLY, ANY_DASH }
+    public enum WhitespaceHandling { EXACT, TRIM }
+    public enum NumericPadding { EXACT, PAD_ZEROS }
+
+    public Strictness withCaseMatching(CaseMatching caseMatching);
+    public Strictness withDashMatching(DashMatching dashMatching);
+    public Strictness withWhitespace(WhitespaceHandling whitespace);
+    public Strictness withNumericPadding(NumericPadding numericPadding);
+}
+```
+
+Usage: `Country.parseAlpha2(input, Strictness.STRICT.withCaseMatching(CaseMatching.IGNORE_ASCII_CASE))`.
+
+- The canonical constructor rejects `null` components with `NullPointerException`.
+- ASCII case folding MUST NOT use `String.toUpperCase()`/`toLowerCase()` without `Locale.ROOT`, and SHOULD use
+  explicit ASCII range checks.
+- Whitespace trimming follows the spec's Unicode `White_Space` definition. `String.strip()` uses
+  `Character.isWhitespace`, which differs (it excludes U+00A0, for one), so it MUST NOT be used on its own.
+
+The matching logic (`Strictness` plus a package-private matcher) is fixed code, not data. The emitter writes it out
+from a template, so the output repo still contains only generated files.
+
+## 7. Failure
+
+```java
+public final class UnknownCodeException extends IllegalArgumentException {
+    public String standard();       // "3166-1"
+    public String field();          // "alpha_2"
+    public String input();          // exactly as passed in
+    public Strictness strictness();
+}
+```
+
+- Unchecked, extending `IllegalArgumentException` as the spec recommends. Callers who want to tell it apart from
+  their own argument bugs catch `UnknownCodeException` specifically.
+- Message: `"XX" is not a known ISO 3166-1 alpha_2 code`, with the input escaped as a Java string literal.
+- A `null` input or `null` strictness to any operation throws `NullPointerException` from
+  `Objects.requireNonNull(value, "<parameter name>")`. Lookups MUST NOT pass `null` to `Map.get`, which would
+  quietly return "absent".
+
+## 8. Generated file conventions
+
+- Every file starts with:
+  ```java
+  // SPDX-License-Identifier: LGPL-2.1-or-later
+  // Generated from Debian iso-codes 4.20.1. Do not edit.
+  ```
+- Every public type and member has Javadoc, including `@param`, `@return` and `@throws`. `javadoc` MUST run with no
+  warnings.
+- Generated code MUST compile with `-Xlint:all -Werror`.
+- Formatting is whatever JavaPoet produces; it isn't hand-tuned.
+
+## 9. Conformance gaps
+
+What the current emitter output (`intermediate-model` branch) is missing, against this document and the spec:
+
+| Gap | Spec |
+|-----|------|
+| No `Strictness` type; lookups are exact only. | §6 |
+| No `parse<Field>` or `isValid<Field>` operations. | §5.3 |
+| No `UnknownCodeException`. | §7.1 |
+| `from<Field>(null)` returns `Optional.empty()` instead of throwing `NullPointerException`. | §7.2 |
+| `enum` types have no `all()`. | §5.3 |
+| `enum` `toString()` returns the constant name, not the canonical code (wrong for ISO 639 and ISO 15924). | §5.3 |
+| `IsoCodes` lacks `SOURCE_NAME` and `SOURCE_LICENSE`. | §5.4 |
+| No `Automatic-Module-Name` in the JAR manifest. | §1 here |
+| Class types (`Subdivision`, `Language`) `toString()` already returns the primary code. ✓ | — |
