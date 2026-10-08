@@ -152,6 +152,11 @@ functions that help consumers migrate data, to be specified in the output spec.
 The dataset records what existed and when. It deliberately carries **no replacement hints**: no links from a
 withdrawn code to the codes that replaced it.
 
+The generated libraries expose only part of it: whether an entry is withdrawn and when
+([output spec §4.1](output-spec/README.md#41-withdrawn-entries)), so consumers can flag stored data whose codes have
+been withdrawn (output spec §6.6). Earlier field values stay in the model for now. When a code has had several
+holders, only the active one, or else the most recently withdrawn one, becomes an entry.
+
 ### 9.1 What is recorded
 
 Per code:
@@ -203,12 +208,10 @@ Decided:
 - Names for codes iso-codes doesn't have yet: CLDR's English name (§4).
 - Wikidata's "official name" is good enough to fill `official_name` (§4).
 - Withdrawn codes are kept as best-effort history (§9), not dropped.
+- Withdrawn entries stay in the generated API as members, flagged and matchable through the `WITHDRAWN`
+  relaxation (output spec §4.1, §6). No replacement hints.
 
 Open:
 
-1. **Withdrawn codes in the API.** Matching withdrawn codes is another strictness axis, with a more granular dial
-   than the on/off `Relaxation`s: for example current codes only (default), codes withdrawn since a given date,
-   codes valid as of a given date, or any code ever issued. A match on a withdrawn code would report that it's withdrawn. To be designed together with the migration
-   functions.
-2. **Whether withdrawn entries are members of the enumeration** (Java: `@Deprecated` enum constants), or a separate
-   history API alongside it. This depends on the same functions.
+1. **A finer-grained lifecycle dial** than the on/off `WITHDRAWN` relaxation, e.g. "withdrawn since a given date".
+   Deferred until there's a use for it.

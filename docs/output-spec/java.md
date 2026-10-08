@@ -60,6 +60,7 @@ The class types MUST NOT implement `Comparable`.
 
 - Accessors are record-style methods without a `get` prefix: `alpha2()`, `englishName()`.
 - Required fields return `String`, never `null`.
+- Lifecycle: `boolean isWithdrawn()` and `Optional<String> withdrawnOn()`.
 - Optional fields return `Optional<String>`, never `null` and never `Optional.of("")`.
 - Fields are `private final String`. Optional fields store `null` internally, wrapped on access.
 
@@ -87,8 +88,11 @@ public static Validation isValidAlpha2Detailed(String alpha2, Strictness strictn
 ```
 
 - The one-argument forms are equivalent to passing `Strictness.STRICT`.
-- `all()` returns an unmodifiable `List` (from `List.copyOf` or equivalent). It exists on `enum` types as well as the
-  class types, so the API is uniform. On `enum` types, `values()` remains available as usual.
+- `all()` returns an unmodifiable `List` of active entries, and `allIncludingWithdrawn()` all of them (from
+  `List.copyOf` or equivalent). Both exist on `enum` types as well as the class types, so the API is uniform. On
+  `enum` types, `values()` remains available and, as the language defines it, includes withdrawn constants.
+- Withdrawn `enum` constants carry `@Deprecated` (with `forRemoval = false`, since they're never removed) and a
+  Javadoc `@deprecated` tag naming the withdrawal date when known: `@deprecated Withdrawn by ISO on 2006-09-26.`
 
 ### Formatting
 
@@ -103,7 +107,7 @@ public static Validation isValidAlpha2Detailed(String alpha2, Strictness strictn
 All four live in the root package, alongside `IsoCodes`.
 
 ```java
-public enum Relaxation { ASCII_CASE, DASH, WHITESPACE, NUMERIC_PADDING }
+public enum Relaxation { ASCII_CASE, DASH, WHITESPACE, NUMERIC_PADDING, WITHDRAWN }
 ```
 
 Constant order is the spec's declaration order. Relaxation sets are `Set<Relaxation>` backed by an `EnumSet`
@@ -113,7 +117,7 @@ MUST NOT be used).
 ```java
 public final class Strictness {
     public static final Strictness STRICT;    // allows nothing
-    public static final Strictness LENIENT;   // allows every Relaxation
+    public static final Strictness LENIENT;   // allows every format Relaxation, not WITHDRAWN
 
     public static Strictness allowing(Relaxation... relaxations);
     public static Strictness allowing(Set<Relaxation> relaxations);
@@ -125,8 +129,9 @@ public final class Strictness {
 }
 ```
 
-Usage: `Country.parseAlpha2(input, Strictness.allowing(Relaxation.ASCII_CASE))`, or
-`Strictness.LENIENT.without(Relaxation.NUMERIC_PADDING)`.
+Usage: `Country.parseAlpha2(input, Strictness.allowing(Relaxation.ASCII_CASE))`,
+`Strictness.LENIENT.without(Relaxation.NUMERIC_PADDING)`, or, for reading stored data,
+`Strictness.LENIENT.with(Relaxation.WITHDRAWN)`.
 
 `Strictness` is a final class rather than a record, so it can defensively copy its set and keep its constructor
 private. It implements `equals`/`hashCode` on the allowed set and `toString` as, e.g., `Strictness[ASCII_CASE, DASH]`.
@@ -194,5 +199,6 @@ What the current emitter output (`intermediate-model` branch) is missing, agains
 | `Country.toString()` isn't explicitly overridden. It's correct today only because constant names equal `alpha_2` codes. | §5.4 |
 | `IsoCodes` lacks `SOURCE_NAME` and `SOURCE_LICENSE`. | §5.5 |
 | No `Automatic-Module-Name` in the JAR manifest. | §1 here |
+| No withdrawn entries, `isWithdrawn()`, `withdrawnOn()`, `allIncludingWithdrawn()` or `WITHDRAWN`. Needs the aggregated sources first. | §4.1, §6 |
 
 Already conforming: field accessors return canonical forms, and `Subdivision.toString()` returns the primary code.

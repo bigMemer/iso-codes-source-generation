@@ -38,6 +38,7 @@ The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are to be read as descr
 | **Code field** | A field whose values are unique across a standard's entries (`StandardDef.uniqueFields`), e.g. `alpha_2`, `alpha_3`, `numeric`. Only code fields can be parsed. |
 | **Primary code** | The one required code field that identifies an entry (`StandardDef.primaryKey`). |
 | **Canonical form** | The one spelling of a code the library outputs, defined per field in [§6.1](#61-canonical-form): `DE`, `DEU`, `004`, `US-CA`. |
+| **Active / withdrawn entry** | An entry whose code ISO currently assigns, or one ISO has withdrawn. Withdrawn entries stay in the library ([§4.1](#41-withdrawn-entries)). |
 | **Ambiguity** | A named way input can differ from canonical form, e.g. letter case ([§6.2](#62-ambiguities)). |
 | **Relaxation** | A relaxable ambiguity, as a member of the `Relaxation` enumeration. |
 | **Strictness** | The set of relaxations a caller allows for one operation ([§6.3](#63-strictness)). |
@@ -78,13 +79,35 @@ generated. Concretely:
 5. **Source order.** Iterating a standard (`all`, [§5.3](#53-operations)) MUST yield entries in the order the
    model holds them, which is the source's order. Bindings MUST NOT sort. Note that source order is not alphabetical
    by primary code; ISO 3166-1, for example, is ordered by `alpha_3`. If the language gives enumerations a natural
-   ordering (e.g. by declaration), it MUST equal source order.
+   ordering (e.g. by declaration), it MUST equal source order. Withdrawn entries come after all active ones.
 
 **Large standards.** Some languages limit how many members an enumeration can have. ISO 3166-2 has over 5,000
 entries. A binding MAY use a different construct for a standard that doesn't fit (for
 example a class with a private constructor and static instances), and MAY omit named members for it. It MUST still
 satisfy rules 1, 2, 4 and 5 and provide every operation in [§5.3](#53-operations). The binding document MUST say
 which standards are affected and why.
+
+### 4.1 Withdrawn entries
+
+When ISO withdraws a code, its entry is **not removed**. It stays a member of its type, marked withdrawn
+([§5.1](#51-field-accessors)), so data stored under the old code still resolves to a typed value, and code that
+refers to the member keeps compiling. Bindings in languages with a deprecation mechanism (Java's `@Deprecated`,
+C#'s `[Obsolete]`, Rust's `#[deprecated]`) MUST apply it to withdrawn members, so consumers see a warning where they
+reference one.
+
+The library's history is best-effort: it covers codes withdrawn since its sources began recording (2015-2016 for
+subdivisions; earlier for countries, via ISO 3166-3). Codes withdrawn before that are simply unknown.
+
+**Reused codes.** ISO occasionally reassigns a withdrawn code to something else. `CS` was Czechoslovakia (withdrawn
+1993), then Serbia and Montenegro (withdrawn 2006). `AI` was the French Afars and Issas and is now Anguilla. So:
+
+- A primary code identifies **at most one entry**: the active holder if there is one, otherwise the most recently
+  withdrawn holder. Earlier holders are not represented. `CS` is Serbia and Montenegro; `AI` is Anguilla.
+- When a withdrawn and an active entry share a value in another code field (ISO 3166-1 `alpha_3` `ATF` belonged to
+  both the withdrawn French Southern and Antarctic Territories and today's French Southern Territories), matching
+  prefers the active entry ([§6.4](#64-matching-algorithm)).
+
+### 4.2 Member names
 
 **Member names** are derived from the entry's primary code:
 
@@ -105,6 +128,15 @@ id in the language's convention, except:
 
 - The model field `name` MUST be exposed as **`english_name`**. The names are English (translations ship
   separately upstream), and `name` collides with built-in enumeration members in many languages.
+
+Every entry MUST also expose its lifecycle:
+
+| Accessor | Type | Meaning |
+|----------|------|---------|
+| `is_withdrawn` | boolean | Whether ISO has withdrawn this entry's code. |
+| `withdrawn_on` | maybe a string | When, as an ISO 8601 date at whatever precision is known: `1993`, `1993-06`, `1993-06-15`. Absent for active entries, and for withdrawn entries whose date is unknown. |
+
+A withdrawn entry's other fields hold their last known values.
 
 Accessor values are strings. All codes, including numeric ones, MUST be exposed as strings in canonical form, so
 `numeric` for Afghanistan is `"004"`, not `4`. A binding MAY add integer conveniences, but only in addition to the
@@ -129,7 +161,8 @@ Names below are concept names. Bindings spell them in their own convention (`fro
 
 | Operation | Returns | Behaviour |
 |-----------|---------|-----------|
-| `all()` | ordered collection of entries | Every entry in source order ([§4](#4-entries-are-enumerations)). The collection MUST be immutable or a fresh copy; callers can't change the library's data through it. |
+| `all()` | ordered collection of entries | Every **active** entry, in source order ([§4](#4-entries-are-enumerations)). The collection MUST be immutable or a fresh copy; callers can't change the library's data through it. |
+| `all_including_withdrawn()` | ordered collection of entries | As `all()`, followed by every withdrawn entry. |
 
 **On each standard, for each code field `f`**, three operations, each in a plain and a detailed form:
 
@@ -230,6 +263,10 @@ language's enum member convention:
 | `DASH` | Dash character | Any of the dashes in [§6.4](#64-matching-algorithm) step 2 in place of U+002D: `US–CA`, `US—CA` | U+002D |
 | `WHITESPACE` | Surrounding whitespace | Leading and trailing Unicode `White_Space`: ` DE`, `DE\n`, ` DE` | None |
 | `NUMERIC_PADDING` | Missing leading zeros on numeric codes | Fewer than 3 digits: `4`, `04` | 3 digits: `004` |
+| `WITHDRAWN` | A code that was once valid but has been withdrawn | `CS`, `IN-OR` | The withdrawn entry's own code (`CS`), unchanged |
+
+The first four are **format** relaxations: they're about how a code was written. `WITHDRAWN` is a **lifecycle**
+relaxation: it changes which entries can match at all.
 
 **Non-relaxable** ambiguities are named so bindings agree on them, but spec version 1 never accepts them, under any
 strictness:
@@ -252,7 +289,9 @@ binding.
 A **strictness** is the set of `Relaxation`s a caller allows. Bindings MUST provide:
 
 - **`STRICT`**: the empty set. The default everywhere.
-- **`LENIENT`**: every `Relaxation`.
+- **`LENIENT`**: every **format** relaxation (`ASCII_CASE`, `DASH`, `WHITESPACE`, `NUMERIC_PADDING`), but **not**
+  `WITHDRAWN`. Loosening how input may be written must never quietly start accepting withdrawn codes. Callers who
+  want both say so: `LENIENT` with `WITHDRAWN` added.
 - A way to build any other set, e.g. "strict except `ASCII_CASE`".
 
 Strictness values MUST be immutable. The binding chooses the mechanism (a set type, a wrapper with a builder,
@@ -286,11 +325,15 @@ identical.
 3. **`NUMERIC_PADDING`.** If allowed, and the field is a numeric field (`numeric`), and the string is 1 or 2 ASCII
    digits, left-pad it with `0` to 3 digits. *Observed* if at least one zero was added. Has no effect on other
    fields, including digits inside ISO 3166-2 codes (`AD-2` never matches `AD-02`).
-4. **Exact comparison.** If the string equals an entry's canonical value for the field, that entry matches.
-5. **`ASCII_CASE`.** Otherwise, if allowed, compare again with ASCII `A`–`Z` and `a`–`z` treated as equal. Only
-   ASCII letters fold; the comparison MUST NOT depend on the process locale. If an entry matches here,
-   `ASCII_CASE` is *observed*.
-6. Otherwise nothing matches.
+4. **Candidates.** The candidate entries are the active entries, plus the withdrawn entries if `WITHDRAWN` is
+   allowed.
+5. **Exact comparison.** Candidates whose canonical value for the field equals the string match.
+6. **`ASCII_CASE`.** If nothing matched and `ASCII_CASE` is allowed, compare again with ASCII `A`–`Z` and `a`–`z`
+   treated as equal. Only ASCII letters fold; the comparison MUST NOT depend on the process locale. If a candidate
+   matches here, `ASCII_CASE` is *observed*.
+7. **Selection.** If several candidates matched (only possible through reused codes, [§4.1](#41-withdrawn-entries)),
+   select the active one if any, otherwise the one withdrawn most recently. If nothing matched, there's no match.
+8. **`WITHDRAWN`** is *observed* if the selected entry is withdrawn.
 
 The `relaxations` of a `Match` or `Validation` are exactly the relaxations *observed* above. Allowed but unneeded
 relaxations are never reported: `" DE"` under `LENIENT` reports `{WHITESPACE}`, and `"DE"` under `LENIENT` reports
@@ -302,7 +345,7 @@ Two properties follow, and binding tests SHOULD check them:
 - **Necessity and sufficiency:** matching the same input with strictness equal to exactly the reported set succeeds
   with the same entry, and removing any one member from that set makes it fail.
 
-Under every strictness at most one entry can match. The generator MUST fail the build if, under `LENIENT`, two
+Under every strictness at most one entry is selected, and among active entries at most one can match. The generator MUST fail the build if, under `LENIENT`, two active
 entries' values for the same code field would become indistinguishable. Current data has no such collisions
 (see [§10](#10-implementation-status)).
 
@@ -324,8 +367,39 @@ entries' values for the same code field would become indistinguishable. Current 
 | `Country.from_alpha_2` | `"ＤＥ"` (fullwidth) | absent | absent (`non_ascii_lookalike`) |
 | `Country.from_alpha_2` | `""` | absent | absent |
 
+Withdrawn codes (`STRICT` + `WITHDRAWN` written as `STRICT+W`):
+
+| Operation | Input | `STRICT` | `STRICT+W` → entry, relaxations | `LENIENT` | `LENIENT+W` |
+|-----------|-------|----------|---------------------------------|-----------|-------------|
+| `Country.from_alpha_2` | `"CS"` | absent | CS (Serbia and Montenegro, withdrawn 2006), {`WITHDRAWN`} | absent | CS, {`WITHDRAWN`} |
+| `Country.from_alpha_2` | `"cs"` | absent | absent | absent | CS, {`ASCII_CASE`, `WITHDRAWN`} |
+| `Country.from_alpha_2` | `"AI"` | AI (Anguilla), {} | AI (Anguilla), {} | AI, {} | AI, {} |
+| `Country.from_alpha_3` | `"ATF"` | TF, {} | TF, {} (the active holder wins) | TF, {} | TF, {} |
+| `Subdivision.from_code` | `"IN-OR"` | absent | IN-OR (withdrawn 2023), {`WITHDRAWN`} | absent | IN-OR, {`WITHDRAWN`} |
+| `Subdivision.from_code` | `"IN-XX"` | absent | absent | absent | absent |
+
 Relaxation sets are listed in `Relaxation` declaration order. Formatting the matched entry always gives the
 canonical form: every LENIENT row above formats back to `DE`, `DEU`, `004` or `US-CA`.
+
+### 6.6 Validating input and checking stored data (informative)
+
+The lifecycle relaxation exists to support this pattern. It flags withdrawn codes; deciding what to do about them is
+the consumer's job, and the library carries no hints about what replaced a withdrawn code.
+
+1. **Accept new input** with `STRICT`, or `LENIENT` for messy input. Withdrawn codes are rejected.
+2. **Read stored data** with `WITHDRAWN` added (`STRICT+W` or `LENIENT+W`), so records stored before a code was
+   withdrawn still load as typed values.
+3. **After upgrading the library**, scan stored data with a detailed operation and `WITHDRAWN` allowed:
+
+   | Result | Meaning |
+   |--------|---------|
+   | Match, `WITHDRAWN` not reported | Still valid. |
+   | Match, `WITHDRAWN` reported | Was valid, has since been withdrawn: needs the consumer's own migration. `withdrawn_on` says since when, if known. |
+   | No match | Never a known code, e.g. a typo, or a code withdrawn before the library's history begins. |
+
+**Limitation:** if ISO reassigns a withdrawn code to something new, the entry becomes active again with the new
+holder's values ([§4.1](#41-withdrawn-entries)). A scan reports such a code as valid even though its meaning
+changed. ISO rarely reassigns codes, and only long after withdrawal.
 
 ## 7. Failure
 
@@ -382,8 +456,9 @@ not match.
 - The library's version MUST equal the source version it was generated from (`4.20.1`). If a library has to be
   re-released for the same source version, the binding document defines a suffix scheme.
 - The API shape (types, fields, operations) is stable across source versions, because the model upcasts every
-  source version to its newest schema. Data is not stable: entries can appear, disappear or be renamed between
-  source versions, and removing an entry removes its named member. Consumers should treat every upgrade as
+  source version to its newest schema. Data is not stable: entries can appear, be withdrawn or have their values
+  changed between versions. Members are never removed: a withdrawn entry stays, marked withdrawn
+  ([§4.1](#41-withdrawn-entries)). Consumers should treat every upgrade as
   potentially source-incompatible. The library does not follow semantic versioning.
 - Every generated file MUST start with a comment holding the SPDX licence identifier of the source data and the line
   `Generated from <source name> <source version>. Do not edit.`
@@ -395,6 +470,8 @@ The generator side of this spec:
 
 - [ ] Fail the build on lenient-match collisions ([§6.4](#64-matching-algorithm)). Not yet checked by
   `IsoCodesDataset` validation, though current data has none.
+- [ ] Withdrawn entries and history ([§4.1](#41-withdrawn-entries)). Requires the aggregated sources in
+  [sources.md](../sources.md); today's iso-codes-only generator has no withdrawn entries.
 - [x] Every code value is canonical ([§6.1](#61-canonical-form)): each code field in the model has a format pattern
   enforced by validation.
 - [ ] Check that every ISO 3166-2 code's prefix is an ISO 3166-1 `alpha_2` ([§6.1](#61-canonical-form)). True of all
@@ -414,6 +491,8 @@ Candidates for later versions, deliberately unspecified for now:
   disjoint per standard, but that isn't guaranteed.
 - **More relaxations** for the non-relaxable ambiguities in [§6.2](#62-ambiguities), notably `separator`
   (`US_CA`) and `non_ascii_lookalike` (fullwidth letters).
+- **A finer-grained lifecycle dial**, e.g. accepting only codes withdrawn on or after a given date, or matching as of
+  a given date. Spec version 1 has only the on/off `WITHDRAWN` relaxation.
 - **Translated names.** iso-codes ships gettext translations; the model doesn't carry them.
 - **Other standards.** ISO 3166-3 (former countries), ISO 4217, ISO 15924 and ISO 639 were in an earlier draft and
   were removed when the scope narrowed to ISO 3166-1/2.
