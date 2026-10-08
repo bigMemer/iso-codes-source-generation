@@ -1,7 +1,6 @@
-import isocodes.gen.GenerateIsoCodesTask
-
 plugins {
     java
+    id("isocodes.generator")
 }
 
 val upstreamVersion = providers.gradleProperty("isoCodesVersion").get()
@@ -14,17 +13,13 @@ java {
     toolchain.languageVersion = JavaLanguageVersion.of(21)
 }
 
-val generateIsoCodes = tasks.register<GenerateIsoCodesTask>("generateIsoCodes") {
-    isoCodesVersion = upstreamVersion
+isoCodes {
+    version = upstreamVersion
     basePackage = providers.gradleProperty("basePackage")
-    downloadDirectory = layout.buildDirectory.dir("iso-codes-json")
-    outputDirectory = layout.buildDirectory.dir("generated/sources/iso-codes")
 }
 
-// Generated sources are compiled and tested here so a broken generator never reaches the output repo.
-sourceSets.main {
-    java.srcDir(generateIsoCodes)
-}
+// The plugin adds the generated sources to the main source set. They're compiled and tested here so a broken
+// generator never reaches the output repo.
 
 tasks.withType<JavaCompile>().configureEach {
     options.release = 17
@@ -47,6 +42,13 @@ tasks.test {
     systemProperty("basePackage", providers.gradleProperty("basePackage").get())
 }
 
+// The generator's own unit tests live in the included build; run them as part of this build's check.
+tasks.check {
+    dependsOn(listOf("model", "source-isocodes", "emitter-java", "gradle-plugin").map {
+        gradle.includedBuild("generator").task(":$it:check")
+    })
+}
+
 val writeVersionFile = tasks.register("writeVersionFile") {
     val versionFile = layout.buildDirectory.file("iso-codes-version/iso-codes.version")
     val version = upstreamVersion // local copy so the action doesn't capture the build script
@@ -60,7 +62,7 @@ val writeVersionFile = tasks.register("writeVersionFile") {
 // The exact files the iso-codes-java output repo tracks: generated sources plus the upstream version they came from.
 tasks.register<Sync>("exportOutput") {
     description = "Assembles the generated files for the iso-codes-java output repo in build/output."
-    from(generateIsoCodes) { into("src/main/java") }
+    from(tasks.named("generateIsoCodes")) { into("src/main/java") }
     from(writeVersionFile)
     into(layout.buildDirectory.dir("output"))
 }

@@ -8,12 +8,41 @@ gets published to Maven Central. Generated code only reaches that repo through p
 
 ## How it works
 
-`buildSrc/` contains a Gradle task that downloads one iso-codes release from salsa.debian.org and writes Java
-sources for it. The build then compiles those sources, runs `src/test` against them and builds their Javadoc, so a
-generator bug fails here instead of in the output repo.
+```
+ source-isocodes            model                       emitter-java
+ iso-codes JSON  ──────►  versioned records  ──────►  Java sources
+                 parse     ──upcast──► latest  emit
+                           + validate
+```
+
+The generator is a separate Gradle build in `generator/`, split into modules so the boundaries are enforced by
+the compiler:
+
+| Module            | Knows about                                         | Depends on |
+|-------------------|-----------------------------------------------------|------------|
+| `model`           | Our intermediate representation, nothing else       | nothing    |
+| `source-isocodes` | iso-codes file names, JSON keys, salsa.debian.org   | `model`    |
+| `emitter-java`    | Java naming, enums vs classes, JavaPoet             | `model`    |
+| `gradle-plugin`   | Wiring one source to one emitter in a Gradle build  | all three  |
+
+**Model.** Each standard is a sealed interface whose nested records are numbered schema versions, e.g.
+`Country.V1` (no flag) and `Country.V2` (with flag). Every version can `toLatest()`, deriving what's missing
+where possible: `V1 → V2` computes the flag emoji from the alpha-2 code. `IsoCodesDataset.fromSource` upcasts
+everything and validates it against each standard's `DEFINITION`: required fields, formats, uniqueness. Emitters
+only ever see the newest versions, so the generated API is the same for every upstream release.
+
+**Source.** `IsoCodesShapes` lists every JSON layout iso-codes has published, each tagged with the schema version it
+parses into. A file is matched against them newest first. A file that fits none, for example because upstream added
+a field, **fails the build** with a message saying what didn't match.
+
+**When upstream changes:**
+- *Same information, new layout:* add a shape in `source-isocodes` that parses into the existing model version.
+- *New information:* add a model version (`V3`) with an upcaster from `V2`, point the `DEFINITION` at it, and add
+  the matching shape. The emitter picks up the new field from the definition.
+- *A different source of truth:* write a new `source-*` module that produces `SourceData`. Nothing else changes.
 
 ```sh
-./gradlew build                                   # generate + test the isoCodesVersion in gradle.properties
+./gradlew build                                   # generator unit tests + generate/compile/test 4.20.1
 ./gradlew build exportOutput -PisoCodesVersion=4.7.0
 ```
 
@@ -41,8 +70,8 @@ build/output/
 | ISO 639-5  | `iso639.LanguageFamily`  | enum  | `fromAlpha3`                                     |
 
 ISO 3166-2 and ISO 639-3 have thousands of entries, more than a single JVM class can hold as enum constants, so
-they are plain classes split across package-private data holder classes. A field present on every entry returns
-`String`; one only some entries have returns `Optional<String>`. The JSON `name` field is exposed as
+they are plain classes split across package-private data holder classes. Required model fields return `String`;
+optional ones return `Optional<String>`. The JSON `name` field is exposed as
 `englishName()` because `name()` is taken by `Enum`.
 
 ## CI

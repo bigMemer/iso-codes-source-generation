@@ -1,4 +1,4 @@
-package isocodes.gen;
+package isocodes.source.isocodes;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -12,8 +12,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
-/** Downloads data files for one iso-codes release from Debian's GitLab (salsa.debian.org). */
-final class UpstreamSource {
+/** Downloads data files for one iso-codes release from Debian's GitLab (salsa.debian.org), caching them on disk. */
+public final class SalsaFiles implements UpstreamFiles {
 
     private static final String RAW_BASE = "https://salsa.debian.org/iso-codes-team/iso-codes/-/raw/";
 
@@ -25,7 +25,7 @@ final class UpstreamSource {
     private final Path cacheDir;
     private String tag;
 
-    UpstreamSource(String version, Path cacheDir) {
+    public SalsaFiles(String version, Path cacheDir) {
         this.version = version;
         this.cacheDir = cacheDir;
     }
@@ -35,8 +35,8 @@ final class UpstreamSource {
         return List.of("v" + version, "iso-codes-" + version);
     }
 
-    /** Returns the file's contents, or empty if it does not exist in this release. */
-    Optional<String> fetch(String fileName) {
+    @Override
+    public Optional<String> fetch(String fileName) {
         Path cached = cacheDir.resolve(fileName);
         try {
             if (Files.exists(cached)) {
@@ -55,11 +55,6 @@ final class UpstreamSource {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-    }
-
-    String fetchRequired(String fileName) {
-        return fetch(fileName).orElseThrow(() -> new IllegalStateException(
-                "iso-codes " + version + " has no data/" + fileName + " (tried tags " + candidateTags() + ")"));
     }
 
     private Optional<String> get(String url) throws IOException {

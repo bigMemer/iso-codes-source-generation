@@ -1,5 +1,9 @@
-package isocodes.gen;
+package isocodes.gradle;
 
+import isocodes.emitter.java.JavaEmitter;
+import isocodes.model.IsoCodesDataset;
+import isocodes.source.isocodes.IsoCodesSource;
+import isocodes.source.isocodes.SalsaFiles;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,7 +18,7 @@ import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.OutputDirectory;
 import org.gradle.api.tasks.TaskAction;
 
-/** Downloads one iso-codes release and generates Java sources from its JSON data. */
+/** Reads one iso-codes release into the model and emits Java sources from it. */
 @CacheableTask
 public abstract class GenerateIsoCodesTask extends DefaultTask {
 
@@ -37,8 +41,9 @@ public abstract class GenerateIsoCodesTask extends DefaultTask {
         Path downloads = getDownloadDirectory().get().getAsFile().toPath().resolve(version);
         Path output = getOutputDirectory().get().getAsFile().toPath();
         deleteRecursively(output);
-        new JavaGenerator(new UpstreamSource(version, downloads), version, getBasePackage().get(), getLogger())
-                .generateAll(output);
+        // The only place a source meets an emitter. Swapping either side means changing this line, nothing else.
+        IsoCodesDataset dataset = IsoCodesDataset.fromSource(IsoCodesSource.read(version, new SalsaFiles(version, downloads)));
+        JavaEmitter.write(dataset, getBasePackage().get(), output);
     }
 
     private static void deleteRecursively(Path dir) throws IOException {

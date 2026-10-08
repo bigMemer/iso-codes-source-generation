@@ -1,4 +1,5 @@
 pluginManagement {
+    includeBuild("generator")
     repositories {
         gradlePluginPortal()
         mavenCentral()
