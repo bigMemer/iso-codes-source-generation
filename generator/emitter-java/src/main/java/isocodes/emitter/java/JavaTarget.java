@@ -22,16 +22,10 @@ record JavaTarget(String standardId, String subPackage, String className, Kind k
         TABLE
     }
 
-    /** ISO 3166-2 and 639-3 have thousands of entries, more than a single class can hold as enum constants. */
+    /** ISO 3166-2 has thousands of entries, more than a single class can hold as enum constants. */
     static final Map<String, JavaTarget> BY_STANDARD = List.of(
                     new JavaTarget("3166-1", "iso3166", "Country", Kind.ENUM),
-                    new JavaTarget("3166-2", "iso3166", "Subdivision", Kind.TABLE),
-                    new JavaTarget("3166-3", "iso3166", "FormerCountry", Kind.ENUM),
-                    new JavaTarget("4217", "iso4217", "Currency", Kind.ENUM),
-                    new JavaTarget("15924", "iso15924", "Script", Kind.ENUM),
-                    new JavaTarget("639-2", "iso639", "LanguagePart2", Kind.ENUM),
-                    new JavaTarget("639-3", "iso639", "Language", Kind.TABLE),
-                    new JavaTarget("639-5", "iso639", "LanguageFamily", Kind.ENUM))
+                    new JavaTarget("3166-2", "iso3166", "Subdivision", Kind.TABLE))
             .stream()
             .collect(Collectors.toUnmodifiableMap(JavaTarget::standardId, Function.identity()));
 

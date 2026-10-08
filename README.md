@@ -1,6 +1,7 @@
 # iso-codes-source-generation
 
-Generates Java sources from [Debian's iso-codes](https://salsa.debian.org/iso-codes-team/iso-codes) JSON data.
+Generates Java sources for ISO 3166-1 (countries) and ISO 3166-2 (country subdivisions) from
+[Debian's iso-codes](https://salsa.debian.org/iso-codes-team/iso-codes) JSON data.
 
 This repo holds only the generator. The generated library lives in
 [bigMemer/iso-codes-java](https://github.com/bigMemer/iso-codes-java), which is what consumers depend on and what
@@ -68,15 +69,9 @@ build/output/
 |------------|--------------------------|-------|--------------------------------------------------|
 | ISO 3166-1 | `iso3166.Country`        | enum  | `fromAlpha2`, `fromAlpha3`, `fromNumeric`        |
 | ISO 3166-2 | `iso3166.Subdivision`    | class | `fromCode`, `all()`                              |
-| ISO 3166-3 | `iso3166.FormerCountry`  | enum  | `fromAlpha4`                                     |
-| ISO 4217   | `iso4217.Currency`       | enum  | `fromAlpha3`, `fromNumeric`                      |
-| ISO 15924  | `iso15924.Script`        | enum  | `fromAlpha4`, `fromNumeric`                      |
-| ISO 639-2  | `iso639.LanguagePart2`   | enum  | `fromAlpha3`, `fromAlpha2`, `fromBibliographic`  |
-| ISO 639-3  | `iso639.Language`        | class | `fromAlpha3`, `fromAlpha2`, `fromBibliographic`, `all()` |
-| ISO 639-5  | `iso639.LanguageFamily`  | enum  | `fromAlpha3`                                     |
 
-ISO 3166-2 and ISO 639-3 have thousands of entries, more than a single JVM class can hold as enum constants, so
-they are plain classes split across package-private data holder classes. Required model fields return `String`;
+ISO 3166-2 has thousands of entries, more than a single JVM class can hold as enum constants, so it is a plain
+class split across package-private data holder classes. Required model fields return `String`;
 optional ones return `Optional<String>`. The JSON `name` field is exposed as
 `englishName()` because `name()` is taken by `Enum`.
 

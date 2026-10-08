@@ -5,8 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import isocodes.model.Country;
 import isocodes.model.IsoCodesDataset;
-import isocodes.model.Language;
 import isocodes.model.SourceData;
+import isocodes.model.Subdivision;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -22,14 +22,14 @@ import org.junit.jupiter.api.io.TempDir;
 class JavaEmitterTest {
 
     private static IsoCodesDataset dataset() {
-        List<Language.V1> languages = new ArrayList<>();
+        List<Subdivision.V1> subdivisions = new ArrayList<>();
         // Enough rows to need more than one data holder class.
-        IntStream.range(0, 600).forEach(i -> languages.add(new Language.V1(
-                "" + (char) ('a' + i / 26 / 26 % 26) + (char) ('a' + i / 26 % 26) + (char) ('a' + i % 26),
-                "Language " + i, "I", "L", Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty())));
+        IntStream.range(0, 600).forEach(i -> subdivisions.add(new Subdivision.V1(
+                "DE-" + Integer.toString(i, 36).toUpperCase(java.util.Locale.ROOT),
+                "Subdivision " + i, Optional.empty(), "State")));
         return IsoCodesDataset.fromSource(new SourceData("Test data", "9.9", "CC0-1.0",
                 List.of(new Country.V2("DE", "DEU", "🇩🇪", "Germany", "276", Optional.empty(), Optional.empty())),
-                List.of(), List.of(), List.of(), List.of(), List.of(), languages, List.of()));
+                subdivisions));
     }
 
     @Test
@@ -53,7 +53,7 @@ class JavaEmitterTest {
         assertTrue(country.startsWith("// SPDX-License-Identifier: CC0-1.0\n// Generated from Test data 9.9."), country);
         assertTrue(country.contains("DE(\"DE\", \"DEU\", \"🇩🇪\", \"Germany\", \"276\", null, null)"), country);
         assertTrue(country.contains("public static Optional<Country> fromAlpha3(String alpha3)"), country);
-        assertTrue(Files.exists(dir.resolve("test/out/iso639/LanguageData1.java")));
+        assertTrue(Files.exists(dir.resolve("test/out/iso3166/SubdivisionData1.java")));
     }
 
     @Test

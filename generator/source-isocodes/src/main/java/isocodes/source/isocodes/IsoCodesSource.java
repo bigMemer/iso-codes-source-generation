@@ -19,13 +19,7 @@ public final class IsoCodesSource {
                 version,
                 "LGPL-2.1-or-later",
                 parse(IsoCodesShapes.COUNTRIES, files),
-                parse(IsoCodesShapes.SUBDIVISIONS, files),
-                parse(IsoCodesShapes.FORMER_COUNTRIES, files),
-                parse(IsoCodesShapes.CURRENCIES, files),
-                parse(IsoCodesShapes.SCRIPTS, files),
-                parse(IsoCodesShapes.LANGUAGES_PART_2, files),
-                parse(IsoCodesShapes.LANGUAGES, files),
-                parse(IsoCodesShapes.LANGUAGE_FAMILIES, files));
+                parse(IsoCodesShapes.SUBDIVISIONS, files));
     }
 
     private static <R> List<R> parse(StandardFile<R> file, UpstreamFiles files) {

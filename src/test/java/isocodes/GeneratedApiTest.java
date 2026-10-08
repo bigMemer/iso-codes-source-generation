@@ -1,7 +1,6 @@
 package isocodes;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.reflect.Method;
@@ -50,21 +49,5 @@ class GeneratedApiTest {
         assertEquals("US-CA", california.toString());
         List<?> all = (List<?>) type("iso3166.Subdivision").getMethod("all").invoke(null);
         assertTrue(all.size() > 4000);
-    }
-
-    @Test
-    void languages() throws Exception {
-        Object english = lookup("iso639.Language", "fromAlpha3", "eng");
-        assertEquals("English", call(english, "englishName"));
-        assertEquals("en", call(english, "alpha2"));
-        assertEquals(english, lookup("iso639.Language", "fromAlpha2", "en"));
-        assertEquals("ger", call(lookup("iso639.LanguagePart2", "fromAlpha3", "deu"), "bibliographic"));
-        assertFalse(((Optional<?>) type("iso639.Language").getMethod("fromAlpha3", String.class).invoke(null, "zzzz")).isPresent());
-    }
-
-    @Test
-    void currenciesAndScripts() throws Exception {
-        assertEquals("Euro", call(lookup("iso4217.Currency", "fromAlpha3", "EUR"), "englishName"));
-        assertEquals("Latn", call(lookup("iso15924.Script", "fromNumeric", "215"), "alpha4"));
     }
 }

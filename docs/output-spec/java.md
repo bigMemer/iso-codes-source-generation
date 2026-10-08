@@ -22,12 +22,12 @@ doesn't repeat behaviour the spec already defines.
 | Spec concept | Java |
 |--------------|------|
 | Root namespace | package `com.wwwdottheinternetdotcom.isocodes` (the generator's `basePackage`) |
-| Standard family namespace | sub-package: `.iso3166`, `.iso4217`, `.iso15924`, `.iso639` |
-| Type | concept name as is: `Country`, `LanguagePart2` |
+| Standard family namespace | sub-package: `.iso3166` |
+| Type | concept name as is: `Country`, `Subdivision` |
 | Field `snake_case` id | `lowerCamelCase`: `alpha_2` → `alpha2`, `withdrawal_date` → `withdrawalDate` |
 | `name` field | `englishName()` |
 | Operation `from_f` / `parse_f` / `is_valid_f` | `fromAlpha2`, `parseAlpha2`, `isValidAlpha2` |
-| Member names | exactly the spec's rule: `DE`, `DEU`, `LATN`, `QAA_QTZ` |
+| Member names | exactly the spec's rule: `Country.DE` |
 | Dataset constants | `IsoCodes.SOURCE_NAME`, `IsoCodes.VERSION`, `IsoCodes.SOURCE_LICENSE` |
 | Error type | `UnknownCodeException` |
 
@@ -35,12 +35,11 @@ doesn't repeat behaviour the spec already defines.
 
 ## 3. Enumerations
 
-Standards whose entries fit in a Java `enum` MUST be generated as an `enum`. Currently that's every standard except:
+Standards whose entries fit in a Java `enum` MUST be generated as an `enum`. `Country` is an `enum`; the exception is:
 
 | Standard | Why | Representation |
 |----------|-----|----------------|
 | ISO 3166-2 `Subdivision` (5,000+ entries) | An enum's static initialiser and constant pool exceed the class-file limits (64 KiB per method, 65,535 constants). | `public final class` |
-| ISO 639-3 `Language` (7,900+ entries) | Same. | `public final class` |
 
 The class representation:
 
@@ -94,10 +93,10 @@ public static Validation isValidAlpha2Detailed(String alpha2, Strictness strictn
 ### Formatting
 
 - Each code field's accessor (`alpha2()`, `numeric()`) returns its canonical form, per spec §5.4 and §6.1.
-- `toString()` returns the canonical primary code. On `enum` types this means overriding `toString()`, since the
-  default returns the constant name: `DEU` instead of `deu` for ISO 639, `LATN` instead of `Latn` for ISO 15924, and
-  `QAA_QTZ` instead of `qaa-qtz`. `name()` still returns the constant name, as the language requires; it is not a
-  string form of the code and doesn't parse strictly.
+- `toString()` returns the canonical primary code. For `Country` the default `enum` `toString()` (the constant name)
+  already equals `alpha2()`, but the emitter MUST override `toString()` to return `alpha2()` explicitly, so the
+  guarantee doesn't depend on the member-naming rule. `name()` still returns the constant name, as the language
+  requires.
 
 ## 6. Relaxation, Strictness, Match and Validation
 
@@ -192,9 +191,8 @@ What the current emitter output (`intermediate-model` branch) is missing, agains
 | No `UnknownCodeException`. | §7.1 |
 | `from<Field>(null)` returns `Optional.empty()` instead of throwing `NullPointerException`. | §7.2 |
 | `enum` types have no `all()`. | §5.3 |
-| `enum` `toString()` returns the constant name, not the canonical code (wrong for ISO 639 and ISO 15924). | §5.4 |
+| `Country.toString()` isn't explicitly overridden. It's correct today only because constant names equal `alpha_2` codes. | §5.4 |
 | `IsoCodes` lacks `SOURCE_NAME` and `SOURCE_LICENSE`. | §5.5 |
 | No `Automatic-Module-Name` in the JAR manifest. | §1 here |
 
-Already conforming: field accessors return canonical forms, and the class types' (`Subdivision`, `Language`)
-`toString()` returns the primary code.
+Already conforming: field accessors return canonical forms, and `Subdivision.toString()` returns the primary code.

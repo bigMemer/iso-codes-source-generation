@@ -22,13 +22,6 @@ class UpcastTest {
     }
 
     @Test
-    void formerCountryV1DerivesAlpha2FromAlpha4() {
-        FormerCountry.V1 v1 =
-                new FormerCountry.V1("BUR", "BUMM", "Burma", Optional.of("104"), Optional.empty(), "1989-12-05");
-        assertEquals("BU", v1.toLatest().alpha2());
-    }
-
-    @Test
     void datasetMixesSchemaVersions() {
         IsoCodesDataset dataset = IsoCodesDataset.fromSource(TestData.countries(List.of(
                 new Country.V1("DE", "DEU", "Germany", "276", Optional.empty(), Optional.empty()),

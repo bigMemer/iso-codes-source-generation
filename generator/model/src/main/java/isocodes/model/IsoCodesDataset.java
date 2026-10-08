@@ -16,13 +16,7 @@ public record IsoCodesDataset(
         String sourceVersion,
         String sourceLicense,
         Table<Country.V2> countries,
-        Table<Subdivision.V1> subdivisions,
-        Table<FormerCountry.V2> formerCountries,
-        Table<Currency.V1> currencies,
-        Table<Script.V1> scripts,
-        Table<LanguagePart2.V1> languagesPart2,
-        Table<Language.V1> languages,
-        Table<LanguageFamily.V1> languageFamilies) {
+        Table<Subdivision.V1> subdivisions) {
 
     /**
      * Upcasts every entry to its standard's newest schema version and validates the result.
@@ -35,13 +29,7 @@ public record IsoCodesDataset(
                 source.sourceVersion(),
                 source.sourceLicense(),
                 upcast(Country.DEFINITION, source.countries(), Country::toLatest),
-                upcast(Subdivision.DEFINITION, source.subdivisions(), Subdivision::toLatest),
-                upcast(FormerCountry.DEFINITION, source.formerCountries(), FormerCountry::toLatest),
-                upcast(Currency.DEFINITION, source.currencies(), Currency::toLatest),
-                upcast(Script.DEFINITION, source.scripts(), Script::toLatest),
-                upcast(LanguagePart2.DEFINITION, source.languagesPart2(), LanguagePart2::toLatest),
-                upcast(Language.DEFINITION, source.languages(), Language::toLatest),
-                upcast(LanguageFamily.DEFINITION, source.languageFamilies(), LanguageFamily::toLatest));
+                upcast(Subdivision.DEFINITION, source.subdivisions(), Subdivision::toLatest));
         List<String> problems = new ArrayList<>();
         for (Table<?> table : dataset.tables()) {
             Validator.check(table, problems);
@@ -58,7 +46,6 @@ public record IsoCodesDataset(
 
     /** Every standard, in a fixed order. */
     public List<Table<?>> tables() {
-        return List.of(countries, subdivisions, formerCountries, currencies, scripts, languagesPart2, languages,
-                languageFamilies);
+        return List.of(countries, subdivisions);
     }
 }

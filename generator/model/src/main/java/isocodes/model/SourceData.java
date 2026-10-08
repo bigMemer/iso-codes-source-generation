@@ -15,17 +15,10 @@ public record SourceData(
         String sourceVersion,
         String sourceLicense,
         List<? extends Country> countries,
-        List<? extends Subdivision> subdivisions,
-        List<? extends FormerCountry> formerCountries,
-        List<? extends Currency> currencies,
-        List<? extends Script> scripts,
-        List<? extends LanguagePart2> languagesPart2,
-        List<? extends Language> languages,
-        List<? extends LanguageFamily> languageFamilies) {
+        List<? extends Subdivision> subdivisions) {
 
     public SourceData {
-        Require.nonNull(countries, subdivisions, formerCountries, currencies, scripts, languagesPart2, languages,
-                languageFamilies);
+        Require.nonNull(countries, subdivisions);
         Objects.requireNonNull(sourceName);
         Objects.requireNonNull(sourceVersion);
         Objects.requireNonNull(sourceLicense);

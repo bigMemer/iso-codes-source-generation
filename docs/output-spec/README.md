@@ -1,6 +1,7 @@
 # Generated library specification
 
 **Status:** draft, spec version 1. **Applies to:** every language this generator emits.
+**Scope:** ISO 3166-1 (countries) and ISO 3166-2 (country subdivisions) only.
 
 This document defines what a generated library looks like and how it behaves, independently of any programming
 language. Each language has its own document (see [Language bindings](#language-bindings)) that maps these
@@ -36,7 +37,7 @@ The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are to be read as descr
 | **Required / optional field** | A required field is present on every entry. An optional field may be absent on some. |
 | **Code field** | A field whose values are unique across a standard's entries (`StandardDef.uniqueFields`), e.g. `alpha_2`, `alpha_3`, `numeric`. Only code fields can be parsed. |
 | **Primary code** | The one required code field that identifies an entry (`StandardDef.primaryKey`). |
-| **Canonical form** | The one spelling of a code the library outputs, defined per field in [§6.1](#61-canonical-form): `DE`, `deu`, `Latn`, `004`, `US-CA`. |
+| **Canonical form** | The one spelling of a code the library outputs, defined per field in [§6.1](#61-canonical-form): `DE`, `DEU`, `004`, `US-CA`. |
 | **Ambiguity** | A named way input can differ from canonical form, e.g. letter case ([§6.2](#62-ambiguities)). |
 | **Relaxation** | A relaxable ambiguity, as a member of the `Relaxation` enumeration. |
 | **Strictness** | The set of relaxations a caller allows for one operation ([§6.3](#63-strictness)). |
@@ -54,17 +55,11 @@ convention:
 |------------|------------------|--------------|------------------------------------------|
 | ISO 3166-1 | `Country`        | `alpha_2`    | `alpha_2`, `alpha_3`, `numeric`          |
 | ISO 3166-2 | `Subdivision`    | `code`       | `code`                                   |
-| ISO 3166-3 | `FormerCountry`  | `alpha_4`    | `alpha_4`                                |
-| ISO 4217   | `Currency`       | `alpha_3`    | `alpha_3`, `numeric`                     |
-| ISO 15924  | `Script`         | `alpha_4`    | `alpha_4`, `numeric`                     |
-| ISO 639-2  | `LanguagePart2`  | `alpha_3`    | `alpha_3`, `alpha_2`, `bibliographic`    |
-| ISO 639-3  | `Language`       | `alpha_3`    | `alpha_3`, `alpha_2`, `bibliographic`    |
-| ISO 639-5  | `LanguageFamily` | `alpha_3`    | `alpha_3`                                |
 
 The table is a snapshot; the model's `StandardDef`s are authoritative. Bindings MUST derive fields, code fields and
 primary codes from the model, never from a hand-maintained list.
 
-Types SHOULD be grouped by standard family (`iso3166`, `iso4217`, `iso15924`, `iso639`) using the language's
+Types SHOULD be grouped under a standard-family namespace (`iso3166`) using the language's
 namespacing mechanism.
 
 ## 4. Entries are enumerations
@@ -86,7 +81,7 @@ generated. Concretely:
    ordering (e.g. by declaration), it MUST equal source order.
 
 **Large standards.** Some languages limit how many members an enumeration can have. ISO 3166-2 has over 5,000
-entries and ISO 639-3 has over 7,900. A binding MAY use a different construct for a standard that doesn't fit (for
+entries. A binding MAY use a different construct for a standard that doesn't fit (for
 example a class with a private constructor and static instances), and MAY omit named members for it. It MUST still
 satisfy rules 1, 2, 4 and 5 and provide every operation in [§5.3](#53-operations). The binding document MUST say
 which standards are affected and why.
@@ -97,7 +92,7 @@ which standards are affected and why.
 2. Replace every character that isn't an ASCII letter or digit with `_`.
 3. If the result starts with a digit, prefix `_`.
 
-So `DE` → `DE`, `deu` → `DEU`, `Latn` → `LATN`, `qaa-qtz` → `QAA_QTZ`. A binding MAY adapt this to a mandatory
+So `DE` → `DE`, and a hypothetical subdivision member for `US-CA` would be `US_CA`. A binding MAY adapt this to a mandatory
 language convention (and MUST then document the rule), but the result MUST be deterministic, MUST be unique within
 the type (the generator fails the build otherwise), and MUST NOT change between source versions for the same code.
 
@@ -175,11 +170,12 @@ Turning an entry back into a string MUST always produce the **canonical form** (
 by definition satisfies `STRICT`. There is no option to format any other way.
 
 - **Per code field:** the field's accessor is the formatter. `e.alpha_3` returns `"DEU"`, `e.numeric` returns
-  `"276"`. An optional code field (e.g. `alpha_2` on ISO 639-3) returns absent when the entry has no such code.
+  `"276"`. Should a code field ever be optional, its accessor returns absent when the entry has no such code.
 - **Default string conversion:** whatever the language uses as an entry's default string form (`toString`,
-  `__str__`, `Display`) MUST return the canonical primary code: `DE`, `deu`, `Latn`, `US-CA`.
-- The **member name** (`QAA_QTZ`, `LATN`) is an identifier, not a string form of the code. It MUST NOT be what
-  default string conversion returns, and it doesn't parse ([§6.2](#62-ambiguities), `member_name`).
+  `__str__`, `Display`) MUST return the canonical primary code: `DE`, `US-CA`.
+- The **member name** is an identifier, not a string form of the code. For `Country` it happens to equal the
+  canonical `alpha_2`, but bindings MUST NOT rely on that: default string conversion MUST be defined as the canonical
+  primary code, not as the member name ([§6.2](#62-ambiguities), `member_name`).
 
 Round trips, for every entry `e`, every code field `f` with a value on `e`, and every strictness `s`:
 
@@ -215,19 +211,9 @@ generation time.
 | ISO 3166-1 | `alpha_3` | 3 upper-case ASCII letters | `DEU` |
 | ISO 3166-1 | `numeric` | 3 ASCII digits, zero-padded | `004` |
 | ISO 3166-2 | `code` | country `alpha_2`, U+002D HYPHEN-MINUS, then 1–3 upper-case ASCII letters or digits | `US-CA`, `AD-02` |
-| ISO 3166-3 | `alpha_4` | 4 upper-case ASCII letters | `BUMM` |
-| ISO 4217 | `alpha_3` | 3 upper-case ASCII letters | `EUR` |
-| ISO 4217 | `numeric` | 3 ASCII digits, zero-padded | `978` |
-| ISO 15924 | `alpha_4` | 1 upper-case then 3 lower-case ASCII letters (title case) | `Latn` |
-| ISO 15924 | `numeric` | 3 ASCII digits, zero-padded | `215` |
-| ISO 639-2 | `alpha_3` | 3 lower-case ASCII letters; the reserved range is two such codes joined by U+002D | `deu`, `qaa-qtz` |
-| ISO 639-2, 639-3 | `alpha_2` | 2 lower-case ASCII letters | `de` |
-| ISO 639-2, 639-3 | `bibliographic` | 3 lower-case ASCII letters | `ger` |
-| ISO 639-3, 639-5 | `alpha_3` | 3 lower-case ASCII letters | `deu`, `gem` |
 
-In short: **each standard's own letter case, U+002D as the only dash, no whitespace, numeric codes always 3 digits.**
-The case differs by standard because the ISO standards themselves differ (country and currency codes are upper case,
-language codes lower case, script codes title case). Bindings MUST NOT normalise output to a single case.
+In short: **upper-case ASCII letters, U+002D as the only dash, no whitespace, numeric codes always 3 digits.** ISO
+3166 defines every code in upper case, so output is always upper case and there is no per-standard case to choose.
 
 Code values are always pure ASCII. If a future source version breaks any rule in this table, the generator fails
 the build; it never emits a non-canonical value.
@@ -240,7 +226,7 @@ language's enum member convention:
 
 | `Relaxation` member | Ambiguity | Accepted input when allowed | Canonical output |
 |---------------------|-----------|-----------------------------|------------------|
-| `ASCII_CASE` | Letter case | ASCII letters in either case: `de`, `De`, `LATN` | The standard's case (§6.1) |
+| `ASCII_CASE` | Letter case | ASCII letters in either case: `de`, `De`, `us-ca` | Upper case |
 | `DASH` | Dash character | Any of the dashes in [§6.4](#64-matching-algorithm) step 2 in place of U+002D: `US–CA`, `US—CA` | U+002D |
 | `WHITESPACE` | Surrounding whitespace | Leading and trailing Unicode `White_Space`: ` DE`, `DE\n`, ` DE` | None |
 | `NUMERIC_PADDING` | Missing leading zeros on numeric codes | Fewer than 3 digits: `4`, `04` | 3 digits: `004` |
@@ -255,9 +241,8 @@ strictness:
 | `excess_padding` | `0004`, `00276` | Ambiguous with a longer code; padding only ever adds zeros. |
 | `numeric_sign` | `+004`, `-4` | Codes aren't numbers. |
 | `non_ascii_lookalike` | `ＤＥ` (fullwidth), `DЕ` (Cyrillic Е), `٠٠٤` (Arabic-Indic digits) | Requires Unicode normalisation or confusable detection; deferred. |
-| `member_name` | `QAA_QTZ`, `LATN` (for `Latn`, where case is exact) | A language identifier, not a code. With `ASCII_CASE` allowed, `LATN` matches because of the case relaxation, not because it's a member name. |
+| `member_name` | `US_CA` | A language identifier, not a code; it's the `separator` ambiguity in another guise. (For `Country`, member names equal `alpha_2` codes, so they match as codes, not as member names.) |
 | `wrong_field` | `DEU` passed to `from_alpha_2` | Each operation matches one field (§11). |
-| `range_member` | `qab` for the `qaa-qtz` entry | The range entry stands for itself; its members aren't entries. |
 
 Adding a relaxable ambiguity is a spec change: it adds a `Relaxation` member, which must then be added to every
 binding.
@@ -334,14 +319,13 @@ entries' values for the same code field would become indistinguishable. Current 
 | `Subdivision.from_code` | `"US–CA"` (en dash) | absent | US-CA, {`DASH`} |
 | `Subdivision.from_code` | `"us—ca"` (em dash) | absent | US-CA, {`ASCII_CASE`, `DASH`} |
 | `Subdivision.from_code` | `"US_CA"` | absent | absent (`separator`) |
-| `Script.from_alpha_4` | `"LATN"` | absent | Latn, {`ASCII_CASE`} |
-| `LanguagePart2.from_alpha_3` | `"QAA—QTZ"` (em dash) | absent | qaa-qtz, {`ASCII_CASE`, `DASH`} |
-| `LanguagePart2.from_alpha_3` | `"qab"` | absent | absent (`range_member`) |
+| `Country.from_alpha_3` | `"Deu"` | absent | DE, {`ASCII_CASE`} |
+| `Subdivision.from_code` | `"US - CA"` | absent | absent (`interior_whitespace`) |
 | `Country.from_alpha_2` | `"ＤＥ"` (fullwidth) | absent | absent (`non_ascii_lookalike`) |
 | `Country.from_alpha_2` | `""` | absent | absent |
 
 Relaxation sets are listed in `Relaxation` declaration order. Formatting the matched entry always gives the
-canonical form: every LENIENT row above formats back to `DE`, `004`, `US-CA`, `Latn` or `qaa-qtz`.
+canonical form: every LENIENT row above formats back to `DE`, `DEU`, `004` or `US-CA`.
 
 ## 7. Failure
 
@@ -424,13 +408,15 @@ Each binding document lists its own conformance gaps.
 
 Candidates for later versions, deliberately unspecified for now:
 
-- **Relationships** between entries: a subdivision's country and parent subdivision, ISO 639-2 ↔ 639-3
-  cross-references, a former country's successors.
+- **Relationships** between entries: a subdivision's country and parent subdivision. With the scope now limited to
+  ISO 3166-1/2, this is the most likely next addition.
 - **Parsing across code fields** (`Country.parse("DEU")` trying every code field). Code fields are currently
   disjoint per standard, but that isn't guaranteed.
 - **More relaxations** for the non-relaxable ambiguities in [§6.2](#62-ambiguities), notably `separator`
   (`US_CA`) and `non_ascii_lookalike` (fullwidth letters).
 - **Translated names.** iso-codes ships gettext translations; the model doesn't carry them.
+- **Other standards.** ISO 3166-3 (former countries), ISO 4217, ISO 15924 and ISO 639 were in an earlier draft and
+  were removed when the scope narrowed to ISO 3166-1/2.
 - **Shared conformance test vectors**: a language-neutral file of inputs and expected results that every binding's
   tests run against. Strongly recommended before a second binding exists.
 
