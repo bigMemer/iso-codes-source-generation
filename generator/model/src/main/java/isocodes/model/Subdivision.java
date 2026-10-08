@@ -26,7 +26,7 @@ public sealed interface Subdivision permits Subdivision.V1 {
             "3166-2",
             "ISO 3166-2 codes for the representation of country subdivisions.",
             List.of(
-                    FieldDef.required("code", "Code of the country subset item", "[A-Z]{2}-[A-Z0-9]+", V1::code),
+                    FieldDef.required("code", "Code of the country subset item", "[A-Z]{2}-[A-Z0-9]{1,3}", V1::code),
                     FieldDef.required("name", "Name of the country subset item", null, V1::name),
                     FieldDef.optional("parent", "Parent of the country subset item", null, V1::parent),
                     FieldDef.required("type", "Type of subset of the country", null, V1::type)),

@@ -73,57 +73,83 @@ public static List<Country> all();
 
 public static Optional<Country> fromAlpha2(String alpha2);
 public static Optional<Country> fromAlpha2(String alpha2, Strictness strictness);
+public static Optional<Match<Country>> fromAlpha2Detailed(String alpha2);
+public static Optional<Match<Country>> fromAlpha2Detailed(String alpha2, Strictness strictness);
 
-public static Country parseAlpha2(String alpha2);                        // throws UnknownCodeException
-public static Country parseAlpha2(String alpha2, Strictness strictness); // throws UnknownCodeException
+public static Country parseAlpha2(String alpha2);                                    // throws UnknownCodeException
+public static Country parseAlpha2(String alpha2, Strictness strictness);             // throws UnknownCodeException
+public static Match<Country> parseAlpha2Detailed(String alpha2);                     // throws UnknownCodeException
+public static Match<Country> parseAlpha2Detailed(String alpha2, Strictness strictness); // throws UnknownCodeException
 
 public static boolean isValidAlpha2(String alpha2);
 public static boolean isValidAlpha2(String alpha2, Strictness strictness);
+public static Validation isValidAlpha2Detailed(String alpha2);
+public static Validation isValidAlpha2Detailed(String alpha2, Strictness strictness);
 ```
 
 - The one-argument forms are equivalent to passing `Strictness.STRICT`.
 - `all()` returns an unmodifiable `List` (from `List.copyOf` or equivalent). It exists on `enum` types as well as the
   class types, so the API is uniform. On `enum` types, `values()` remains available as usual.
+
+### Formatting
+
+- Each code field's accessor (`alpha2()`, `numeric()`) returns its canonical form, per spec §5.4 and §6.1.
 - `toString()` returns the canonical primary code. On `enum` types this means overriding `toString()`, since the
-  default returns the constant name, which differs for ISO 639 (`DEU` versus `deu`) and `qaa-qtz`. `name()` still
-  returns the constant name, as the language requires.
+  default returns the constant name: `DEU` instead of `deu` for ISO 639, `LATN` instead of `Latn` for ISO 15924, and
+  `QAA_QTZ` instead of `qaa-qtz`. `name()` still returns the constant name, as the language requires; it is not a
+  string form of the code and doesn't parse strictly.
 
-## 6. Strictness
+## 6. Relaxation, Strictness, Match and Validation
 
-A single public type in the root package:
+All four live in the root package, alongside `IsoCodes`.
 
 ```java
-public record Strictness(
-        CaseMatching caseMatching,
-        DashMatching dashMatching,
-        WhitespaceHandling whitespace,
-        NumericPadding numericPadding) {
+public enum Relaxation { ASCII_CASE, DASH, WHITESPACE, NUMERIC_PADDING }
+```
 
-    public static final Strictness STRICT = ...;   // every component exact
-    public static final Strictness LENIENT = ...;  // every component relaxed
+Constant order is the spec's declaration order. Relaxation sets are `Set<Relaxation>` backed by an `EnumSet`
+wrapped with `Collections.unmodifiableSet`, which keeps declaration-order iteration (`Set.copyOf` doesn't, so it
+MUST NOT be used).
 
-    public enum CaseMatching { EXACT, IGNORE_ASCII_CASE }
-    public enum DashMatching { HYPHEN_MINUS_ONLY, ANY_DASH }
-    public enum WhitespaceHandling { EXACT, TRIM }
-    public enum NumericPadding { EXACT, PAD_ZEROS }
+```java
+public final class Strictness {
+    public static final Strictness STRICT;    // allows nothing
+    public static final Strictness LENIENT;   // allows every Relaxation
 
-    public Strictness withCaseMatching(CaseMatching caseMatching);
-    public Strictness withDashMatching(DashMatching dashMatching);
-    public Strictness withWhitespace(WhitespaceHandling whitespace);
-    public Strictness withNumericPadding(NumericPadding numericPadding);
+    public static Strictness allowing(Relaxation... relaxations);
+    public static Strictness allowing(Set<Relaxation> relaxations);
+
+    public Strictness with(Relaxation relaxation);       // returns a new Strictness
+    public Strictness without(Relaxation relaxation);    // returns a new Strictness
+    public boolean allows(Relaxation relaxation);
+    public Set<Relaxation> allowed();                    // unmodifiable, declaration order
 }
 ```
 
-Usage: `Country.parseAlpha2(input, Strictness.STRICT.withCaseMatching(CaseMatching.IGNORE_ASCII_CASE))`.
+Usage: `Country.parseAlpha2(input, Strictness.allowing(Relaxation.ASCII_CASE))`, or
+`Strictness.LENIENT.without(Relaxation.NUMERIC_PADDING)`.
 
-- The canonical constructor rejects `null` components with `NullPointerException`.
+`Strictness` is a final class rather than a record, so it can defensively copy its set and keep its constructor
+private. It implements `equals`/`hashCode` on the allowed set and `toString` as, e.g., `Strictness[ASCII_CASE, DASH]`.
+
+```java
+public record Match<T>(T entry, Set<Relaxation> relaxations) {}
+public record Validation(boolean isValid, Set<Relaxation> relaxations) {}
+```
+
+- Both records' canonical constructors reject `null` and copy `relaxations` into an unmodifiable `EnumSet` view.
+  `Validation` also rejects a non-empty `relaxations` when `isValid` is false.
+- Only the library constructs them. Their constructors are public because records require it, but callers have no
+  reason to.
+
+Implementation notes:
+
 - ASCII case folding MUST NOT use `String.toUpperCase()`/`toLowerCase()` without `Locale.ROOT`, and SHOULD use
   explicit ASCII range checks.
 - Whitespace trimming follows the spec's Unicode `White_Space` definition. `String.strip()` uses
   `Character.isWhitespace`, which differs (it excludes U+00A0, for one), so it MUST NOT be used on its own.
-
-The matching logic (`Strictness` plus a package-private matcher) is fixed code, not data. The emitter writes it out
-from a template, so the output repo still contains only generated files.
+- The matching logic (`Relaxation`, `Strictness`, `Match`, `Validation` and a package-private matcher) is fixed code,
+  not data. The emitter writes it out from a template, so the output repo still contains only generated files.
 
 ## 7. Failure
 
@@ -139,7 +165,7 @@ public final class UnknownCodeException extends IllegalArgumentException {
 - Unchecked, extending `IllegalArgumentException` as the spec recommends. Callers who want to tell it apart from
   their own argument bugs catch `UnknownCodeException` specifically.
 - Message: `"XX" is not a known ISO 3166-1 alpha_2 code`, with the input escaped as a Java string literal.
-- A `null` input or `null` strictness to any operation throws `NullPointerException` from
+- A `null` input, `null` strictness or `null` relaxation to any operation throws `NullPointerException` from
   `Objects.requireNonNull(value, "<parameter name>")`. Lookups MUST NOT pass `null` to `Map.get`, which would
   quietly return "absent".
 
@@ -161,12 +187,14 @@ What the current emitter output (`intermediate-model` branch) is missing, agains
 
 | Gap | Spec |
 |-----|------|
-| No `Strictness` type; lookups are exact only. | §6 |
-| No `parse<Field>` or `isValid<Field>` operations. | §5.3 |
+| No `Relaxation`, `Strictness`, `Match` or `Validation`; lookups are exact only. | §5.3, §6 |
+| No `parse<Field>`, `isValid<Field>` or `…Detailed` operations. | §5.3 |
 | No `UnknownCodeException`. | §7.1 |
 | `from<Field>(null)` returns `Optional.empty()` instead of throwing `NullPointerException`. | §7.2 |
 | `enum` types have no `all()`. | §5.3 |
-| `enum` `toString()` returns the constant name, not the canonical code (wrong for ISO 639 and ISO 15924). | §5.3 |
-| `IsoCodes` lacks `SOURCE_NAME` and `SOURCE_LICENSE`. | §5.4 |
+| `enum` `toString()` returns the constant name, not the canonical code (wrong for ISO 639 and ISO 15924). | §5.4 |
+| `IsoCodes` lacks `SOURCE_NAME` and `SOURCE_LICENSE`. | §5.5 |
 | No `Automatic-Module-Name` in the JAR manifest. | §1 here |
-| Class types (`Subdivision`, `Language`) `toString()` already returns the primary code. ✓ | — |
+
+Already conforming: field accessors return canonical forms, and the class types' (`Subdivision`, `Language`)
+`toString()` returns the primary code.
