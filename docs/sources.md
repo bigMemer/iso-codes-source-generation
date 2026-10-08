@@ -174,8 +174,9 @@ Missing dates are explicit (`unknown`), never guessed silently.
 
 **Recorded since.** Each code records the earliest date from which the sources account for its status
 continuously (output spec §5.1 `recorded_since`): usually iso-codes' first commit (2004-02-22) for codes it had
-then, or the first source snapshot or dated change-log entry otherwise. Before ISO first published a standard
-(ISO 3166-1 in 1974; ISO 3166-2 in 1998-12, per ISO's catalogue), every code's state is `PREDATES_STANDARD`. Every date is stored as an interval: an exact day,
+then, or the first source snapshot or dated change-log entry otherwise. Before ISO first published a kind of
+code, every code of that kind is `PREDATES_STANDARD`: ISO 3166-1 alpha-2 and alpha-3 date from 1974, numeric from
+1981, and ISO 3166-2 from 1998-12 (per ISO's catalogue). Every date is stored as an interval: an exact day,
 a coarser precision (`1993`), or only a latest possible date (the first source release showing the change).
 Generated libraries expose these intervals as earliest/latest dates and use them for `written_at` checks
 (output spec §6.7), which report every state an imprecise date allows.
@@ -231,8 +232,8 @@ Decided:
 - `written_at` checks report the set of possible states (`SAME`, `OTHER`, `WITHDRAWN`, `UNASSIGNED`, or
   `UNRECORDED`) and pass or fail by a `HistoryPolicy` dial, default `PESSIMISTIC` (output spec §6.7).
 - No grace-period logic in the library; callers apply their own using the date ranges.
-- Recorded history starts per code (`recorded_since`), not per standard. Dates before a standard's first
-  publication give `PREDATES_STANDARD`.
+- Recorded history starts per code (`recorded_since`), not per standard. Dates before a code field's first
+  publication give `PREDATES_STANDARD`, per field (ISO 3166-1 numeric codes only from 1981).
 
 Open:
 

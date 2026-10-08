@@ -244,7 +244,7 @@ Each library MUST expose, as constants in its root namespace:
 | `source_name`    | `Debian iso-codes` |
 | `source_version` | `4.20.1` |
 | `source_license` | `LGPL-2.1-or-later` |
-| `standard_published`, per standard | when ISO first published the standard, as a date range: ISO 3166-1 in 1974, ISO 3166-2 in 1998-12 ([§6.7](#67-checking-against-when-a-value-was-written)) |
+| `field_introduced`, per code field | when ISO first published that kind of code, as a date range ([§6.7](#67-checking-against-when-a-value-was-written)): ISO 3166-1 `alpha_2` and `alpha_3` in 1974, `numeric` in 1981; ISO 3166-2 `code` in 1998-12 |
 
 ## 6. Ambiguities, canonical form and strictness
 
@@ -438,16 +438,17 @@ Every binding MUST generate `HistoryState` with exactly these members, in this o
 | `WITHDRAWN` | The code meant nothing: its previous holder had been withdrawn. |
 | `UNASSIGNED` | The code meant nothing: it had never been assigned. |
 | `UNRECORDED` | `written_at` is before the code's `recorded_since` ([§5.1](#51-field-accessors)): the library has no evidence about the code then. Always reported alone. |
-| `PREDATES_STANDARD` | `written_at` is before ISO first published the standard, so no code of that standard meant anything. Always reported alone. Almost always means `written_at` itself is wrong. |
+| `PREDATES_STANDARD` | `written_at` is before ISO first published the kind of code being matched, so no such code meant anything. Always reported alone. Almost always means `written_at` itself is wrong. |
 
 The check produces the **set of states the code could have been in** on `written_at`:
 
 1. Each code has a timeline of segments: unassigned, then held by an entry, possibly withdrawn, possibly held by
    another entry, and so on. Each boundary between segments has a date range ([§5.1](#51-field-accessors)).
-2. If `written_at` is certainly before the standard was first published (`standard_published`,
-   [§5.5](#55-dataset-information)), the result is `{PREDATES_STANDARD}`. If it falls within the publication date's
-   range (e.g. December 1998 for ISO 3166-2), `PREDATES_STANDARD` is one of the possible states, alongside the
-   states step 4 gives.
+2. If `written_at` is certainly before the matched code field was introduced (`field_introduced`,
+   [§5.5](#55-dataset-information)), the result is `{PREDATES_STANDARD}`. This is per field: ISO 3166-1 numeric
+   codes only arrived in 1981, so a numeric code written in 1978 predates its standard while an alpha-2 code
+   written the same day doesn't. If `written_at` falls within the introduction date's range (e.g. December 1998 for
+   ISO 3166-2), `PREDATES_STANDARD` is one of the possible states, alongside the states step 4 gives.
 3. Otherwise, if `written_at` is before the code's `recorded_since`, the result is `{UNRECORDED}`. This is per code,
    because how far back the evidence goes differs by code.
 4. Otherwise, the result is the set of states of every segment `written_at` could fall in, taking every possible
@@ -507,6 +508,8 @@ Matching with `STRICT` plus `WITHDRAWN`, so withdrawn codes match. ✓ passes, �
 | a withdrawn code whose withdrawal is known only as "no later than 2021-10-27" | 2020-05-01 | `{SAME, WITHDRAWN}` | ✗ | ✗ | ✓ | ✓ | ✓ |
 | a code that passed directly between two holders in a known year | mid-year | `{OTHER, SAME}` | ✗ | ✗ | ✗ | ✓ | ✓ |
 | `BS-NP` (recorded since 2004-02-22) | 1997-01-01 | `{PREDATES_STANDARD}` | ✗ | ✗ | ✓ | ✓ | ✓ |
+| `276` via `Country.from_numeric` | 1978-01-01 | `{PREDATES_STANDARD}` (numeric codes date from 1981) | ✗ | ✗ | ✓ | ✓ | ✓ |
+| `DE` via `Country.from_alpha_2` | 1978-01-01 | `{SAME}`, if West Germany's `DE` is recorded as the same holder | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `BS-NP` | 2001-01-01 | `{UNRECORDED}` | ✗ | ✓ | ✓ | ✓ | ✓ |
 | `BS-NP` | 2005-01-01 | `{SAME}` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `BS-NP` (withdrawn 2010-06-30, reassigned to the same region 2018-11-26) | 2012-01-01 | `{WITHDRAWN}` | ✗ | ✗ | ✓ | ✓ | ✓ |
