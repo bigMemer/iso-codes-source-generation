@@ -13,6 +13,11 @@ What every generated library must look like and how it behaves, in any language,
 [docs/output-spec](docs/output-spec/README.md). Each output language has its own binding document there (currently
 [Java](docs/output-spec/java.md)), including a list of where the current output falls short.
 
+## Data sources
+
+The generator is moving from iso-codes alone to an aggregate of Unicode CLDR, iso-codes, Wikidata and reviewed
+overrides. The design is in [docs/sources.md](docs/sources.md); until it's implemented, iso-codes is the only source.
+
 ## How it works
 
 ```
