@@ -171,19 +171,22 @@ Names below are concept names. Bindings spell them in their own convention (`fro
 | `from_f(input, strictness = STRICT)` | maybe an entry | The entry whose `f` matches `input` under `strictness` ([§6](#6-ambiguities-canonical-form-and-strictness)), or absent. Never fails for non-null input. |
 | `parse_f(input, strictness = STRICT)` | an entry | Same match, but no match is a failure ([§7](#7-failure)). |
 | `is_valid_f(input, strictness = STRICT)` | boolean | Whether a match exists. |
-| `from_f_detailed(input, strictness = STRICT)` | maybe a `Match` | As `from_f`, plus the relaxations the match needed. |
-| `parse_f_detailed(input, strictness = STRICT)` | a `Match` | As `parse_f`, plus the relaxations the match needed. |
-| `is_valid_f_detailed(input, strictness = STRICT)` | a `Validation` | As `is_valid_f`, plus the relaxations the match needed. |
+| `from_f_detailed(input, strictness = STRICT, written_at = absent)` | maybe a `Match` | As `from_f`, plus the relaxations the match needed and, if `written_at` is given, history findings ([§6.7](#67-checking-against-when-a-value-was-written)). |
+| `parse_f_detailed(input, strictness = STRICT, written_at = absent)` | a `Match` | As `parse_f`, plus the same. |
+| `is_valid_f_detailed(input, strictness = STRICT, written_at = absent)` | a `Validation` | As `is_valid_f`, plus the same. |
 
 The result shapes:
 
 | Concept name | Fields | Rules |
 |--------------|--------|-------|
-| `Match` | `entry`: the matched entry; `relaxations`: set of `Relaxation` | `relaxations` is exactly the set of relaxations that were materially needed ([§6.4](#64-matching-algorithm)). Empty means the input was already canonical. |
-| `Validation` | `is_valid`: boolean; `relaxations`: set of `Relaxation` | When `is_valid` is false, `relaxations` is empty. |
+| `Match` | `entry`: the matched entry; `relaxations`: set of `Relaxation`; `findings`: set of `Finding` | `relaxations` is exactly the set of relaxations that were materially needed ([§6.4](#64-matching-algorithm)). Empty means the input was already canonical. `findings` is empty unless `written_at` was given. |
+| `Validation` | `is_valid`: boolean; `relaxations`: set of `Relaxation`; `findings`: set of `Finding` | When `is_valid` is false, both sets are empty. |
 
-`Relaxation` is an enumeration ([§6.2](#62-ambiguities)). Relaxation sets MUST be immutable and MUST iterate in the
-declaration order of `Relaxation`.
+`Relaxation` ([§6.2](#62-ambiguities)) and `Finding` ([§6.7](#67-checking-against-when-a-value-was-written)) are
+enumerations. Their sets MUST be immutable and MUST iterate in declaration order.
+
+`written_at` is a calendar date (no time, no time zone). It's accepted only by the detailed forms, so the plain
+forms keep their simple meaning.
 
 All six MUST agree. For every input `x` and strictness `s`:
 
@@ -397,9 +400,51 @@ the consumer's job, and the library carries no hints about what replaced a withd
    | Match, `WITHDRAWN` reported | Was valid, has since been withdrawn: needs the consumer's own migration. `withdrawn_on` says since when, if known. |
    | No match | Never a known code, e.g. a typo, or a code withdrawn before the library's history begins. |
 
-**Limitation:** if ISO reassigns a withdrawn code to something new, the entry becomes active again with the new
-holder's values ([§4.1](#41-withdrawn-entries)). A scan reports such a code as valid even though its meaning
-changed. ISO rarely reassigns codes, and only long after withdrawal.
+If the consumer knows when each value was stored, passing it as `written_at` adds history findings to the scan
+([§6.7](#67-checking-against-when-a-value-was-written)): whether the code was already invalid when stored, and
+whether it has since been given to something else. Without `written_at`, a code ISO reassigned after the value was
+stored scans as valid even though its meaning changed.
+
+### 6.7 Checking against when a value was written
+
+Given `written_at`, the detailed operations compare the matched entry's code with its history at that date. This
+doesn't change which entry matches (matching is always against the library's current state, [§6.4](#64-matching-algorithm));
+it only adds `Finding`s.
+
+Every binding MUST generate `Finding` with exactly these members, in this order:
+
+| `Finding` member | Reported when |
+|------------------|---------------|
+| `NOT_YET_ASSIGNED` | `written_at` is before the code took effect for the matched entry. The value was invalid when written. |
+| `ALREADY_WITHDRAWN` | `written_at` is on or after the matched entry's withdrawal. The value was invalid when written. |
+| `WITHDRAWN_SINCE` | The code was valid for the matched entry at `written_at` and has been withdrawn since. |
+| `REASSIGNED_SINCE` | At `written_at` the code belonged to a different holder than the matched entry. The value's meaning has changed. |
+| `UNDETERMINED` | The library's dates aren't precise enough to tell which of the above, if any, applies. |
+
+No findings means the code was valid for the matched entry at `written_at` and still is.
+
+**Dates are intervals.** Each date in the library's history is known only to a precision: an exact day from ISO's
+change notices, a year (`1993`), or only a latest possible date (the first source release that showed the change).
+A binding MUST treat each as the interval of days it could be. A finding is reported only if it holds for every
+possible day in those intervals. If the possible answers differ, the result is exactly `{UNDETERMINED}`. Bindings
+MUST NOT pick the most likely answer.
+
+**Holders.** `REASSIGNED_SINCE` needs to know a code's earlier holders, which aren't entries
+([§4.1](#41-withdrawn-entries)). The library records their validity intervals, nothing else about them: it says
+*that* the meaning changed, not what it used to be.
+
+| Input | `written_at` | Strictness | Entry | Findings |
+|-------|--------------|------------|-------|----------|
+| `"DE"` | 2020-01-01 | `STRICT` | DE | {} |
+| `"SS"` (South Sudan, 2011) | 2005-01-01 | `STRICT` | SS | {`NOT_YET_ASSIGNED`} |
+| `"IN-OR"` | 2020-01-01 | `STRICT+W` | IN-OR | {`WITHDRAWN_SINCE`} |
+| `"IN-OR"` | 2025-01-01 | `STRICT+W` | IN-OR | {`ALREADY_WITHDRAWN`} |
+| `"CS"` | 1990-01-01 | `STRICT+W` | CS (Serbia and Montenegro) | {`REASSIGNED_SINCE`} (it was Czechoslovakia then) |
+| `"CS"` | 2005-01-01 | `STRICT+W` | CS (Serbia and Montenegro) | {`WITHDRAWN_SINCE`} |
+| a code whose introduction date is only bounded by a source release | inside the bound | any | the entry | {`UNDETERMINED`} |
+
+The library's history is best-effort ([§4.1](#41-withdrawn-entries)), so findings are too. `UNDETERMINED` is the
+library being honest about that, not an error.
 
 ## 7. Failure
 
@@ -491,8 +536,8 @@ Candidates for later versions, deliberately unspecified for now:
   disjoint per standard, but that isn't guaranteed.
 - **More relaxations** for the non-relaxable ambiguities in [§6.2](#62-ambiguities), notably `separator`
   (`US_CA`) and `non_ascii_lookalike` (fullwidth letters).
-- **A finer-grained lifecycle dial**, e.g. accepting only codes withdrawn on or after a given date, or matching as of
-  a given date. Spec version 1 has only the on/off `WITHDRAWN` relaxation.
+- **Matching as of a date**, i.e. resolving a code to the holder it had at `written_at` (making earlier holders
+  entries). Spec version 1 only reports, through `Finding`s, that the holder changed.
 - **Translated names.** iso-codes ships gettext translations; the model doesn't carry them.
 - **Other standards.** ISO 3166-3 (former countries), ISO 4217, ISO 15924 and ISO 639 were in an earlier draft and
   were removed when the scope narrowed to ISO 3166-1/2.

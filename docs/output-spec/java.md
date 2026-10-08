@@ -85,7 +85,11 @@ public static boolean isValidAlpha2(String alpha2);
 public static boolean isValidAlpha2(String alpha2, Strictness strictness);
 public static Validation isValidAlpha2Detailed(String alpha2);
 public static Validation isValidAlpha2Detailed(String alpha2, Strictness strictness);
+public static Validation isValidAlpha2Detailed(String alpha2, Strictness strictness, LocalDate writtenAt);
 ```
+
+Every detailed operation has the same three overloads: input only; input and strictness; input, strictness and
+`java.time.LocalDate writtenAt`. Shown above for `isValidAlpha2Detailed` only.
 
 - The one-argument forms are equivalent to passing `Strictness.STRICT`.
 - `all()` returns an unmodifiable `List` of active entries, and `allIncludingWithdrawn()` all of them (from
@@ -137,12 +141,14 @@ Usage: `Country.parseAlpha2(input, Strictness.allowing(Relaxation.ASCII_CASE))`,
 private. It implements `equals`/`hashCode` on the allowed set and `toString` as, e.g., `Strictness[ASCII_CASE, DASH]`.
 
 ```java
-public record Match<T>(T entry, Set<Relaxation> relaxations) {}
-public record Validation(boolean isValid, Set<Relaxation> relaxations) {}
+public enum Finding { NOT_YET_ASSIGNED, ALREADY_WITHDRAWN, WITHDRAWN_SINCE, REASSIGNED_SINCE, UNDETERMINED }
+
+public record Match<T>(T entry, Set<Relaxation> relaxations, Set<Finding> findings) {}
+public record Validation(boolean isValid, Set<Relaxation> relaxations, Set<Finding> findings) {}
 ```
 
-- Both records' canonical constructors reject `null` and copy `relaxations` into an unmodifiable `EnumSet` view.
-  `Validation` also rejects a non-empty `relaxations` when `isValid` is false.
+- Both records' canonical constructors reject `null` and copy both sets into unmodifiable `EnumSet` views.
+  `Validation` also rejects non-empty sets when `isValid` is false.
 - Only the library constructs them. Their constructors are public because records require it, but callers have no
   reason to.
 
@@ -199,6 +205,6 @@ What the current emitter output (`intermediate-model` branch) is missing, agains
 | `Country.toString()` isn't explicitly overridden. It's correct today only because constant names equal `alpha_2` codes. | §5.4 |
 | `IsoCodes` lacks `SOURCE_NAME` and `SOURCE_LICENSE`. | §5.5 |
 | No `Automatic-Module-Name` in the JAR manifest. | §1 here |
-| No withdrawn entries, `isWithdrawn()`, `withdrawnOn()`, `allIncludingWithdrawn()` or `WITHDRAWN`. Needs the aggregated sources first. | §4.1, §6 |
+| No withdrawn entries, `isWithdrawn()`, `withdrawnOn()`, `allIncludingWithdrawn()`, `WITHDRAWN`, `Finding` or `writtenAt`. Needs the aggregated sources first. | §4.1, §6 |
 
 Already conforming: field accessors return canonical forms, and `Subdivision.toString()` returns the primary code.

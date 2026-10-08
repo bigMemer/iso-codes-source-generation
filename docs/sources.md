@@ -170,7 +170,19 @@ Per code:
 Per field value: earlier values with the same interval attributes, e.g. a subdivision's previous names, types and
 parents.
 
-Missing dates are explicit (`unknown`), never guessed silently.
+Missing dates are explicit (`unknown`), never guessed silently. Every date is stored as an interval: an exact day,
+a coarser precision (`1993`), or only a latest possible date (the first source release showing the change).
+Generated libraries use these intervals to answer `written_at` checks (output spec §6.7) and report `UNDETERMINED`
+when an interval is too wide.
+
+Each code also records its earlier holders' validity intervals (not their names or other values), so libraries
+can tell that a code's meaning changed. Telling a genuine reassignment (`CS`: Czechoslovakia, then Serbia and
+Montenegro) from a code that briefly disappeared and came back with the same meaning (`GB-ENG`) is best-effort:
+ISO 3166-3 distinguishes holders for country codes; for subdivisions a same-name check decides, flagged for review.
+
+**Date coverage.** Of the subdivision codes both CLDR and iso-codes recorded as added since 2016, ISO's change log
+(via iso3166-updates) names 81% in a dated entry; of those removed, 93%. The rest have only a source-release
+bound.
 
 ### 9.2 Where history comes from
 
