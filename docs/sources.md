@@ -147,8 +147,10 @@ LGPL-2.1, and Unicode's notice).
 ## 9. History
 
 Withdrawn codes and earlier values are kept, best-effort, as part of the dataset rather than dropped. They support
-functions that help consumers migrate data (to be specified in the output spec), such as looking up a withdrawn
-code's successors.
+functions that help consumers migrate data, to be specified in the output spec.
+
+The dataset records what existed and when. It deliberately carries **no replacement hints**: no links from a
+withdrawn code to the codes that replaced it.
 
 ### 9.1 What is recorded
 
@@ -159,13 +161,11 @@ Per code:
 | `status` | `active` or `withdrawn` |
 | `effective_from`, `effective_to` | When ISO introduced and withdrew the code, where known (from §5's `effective_at`) |
 | `known_from`, `known_to` | When our sources first and last had the code (from §5's `known_at`) |
-| `successors` | For a withdrawn code: the codes that replaced it, each with a relation: `renamed_to`, `split_into`, `merged_into`, or `promoted_to_country` (CLDR's `overlong` case, e.g. `US-PR` → `PR`). May be empty, or `unknown_within_country`, when no source says. |
-| `predecessors` | The inverse, for active codes. |
 
 Per field value: earlier values with the same interval attributes, e.g. a subdivision's previous names, types and
 parents.
 
-Missing dates and successors are explicit (`unknown`), never guessed silently.
+Missing dates are explicit (`unknown`), never guessed silently.
 
 ### 9.2 Where history comes from
 
@@ -173,32 +173,14 @@ Missing dates and successors are explicit (`unknown`), never guessed silently.
 |--------|-------|-------|
 | iso-codes release history | First and last release containing each code and each value | 35 releases, 3.67 (2016) onward |
 | CLDR release history | The same, from CLDR's side | 31 releases, CLDR 28 (2015) onward |
-| CLDR alias table | Withdrawn codes with replacements and reasons: 599 subdivisions withdrawn (`deprecated`), 27 `overlong`, 27 country codes | Current release, cumulative |
+| CLDR alias table | Which codes are withdrawn, and why: 599 subdivisions withdrawn (`deprecated`), 27 `overlong`, 27 country codes. Only the status and reason are used; CLDR's replacement values are ignored. | Current release, cumulative |
 | iso3166-updates change log | ISO's effective dates and change descriptions (free text), 909 entries | Back to the 1990s |
 | iso-codes ISO 3166-3 data | Withdrawn country codes with withdrawal dates (31 entries) | Cumulative |
 | Wikidata | End-time qualifiers on code statements | Noisy, so it only flags items for review |
-| Overrides | Corrections and successor links nobody else provides | — |
+| Overrides | Corrections, e.g. a missing or wrong date | — |
 
 Withdrawn ISO 3166-1 codes are exactly what ISO 3166-3 lists, so 3166-3 comes back as history data, not as a
 separate standard type.
-
-### 9.3 Successor links
-
-Successors are the weakest part. Of CLDR's 599 withdrawn subdivision codes, 120 have exact replacements (including
-splits like `LU-D` → five cantons). The other 479 only say "somewhere in this country" (`IN-OR` → `in?`, though
-ISO renamed it to `IN-OD`). Successors are resolved in this order, each step only for codes the previous ones
-didn't resolve:
-
-1. overrides;
-2. CLDR's exact replacements (120 codes);
-3. renames parsed from the ISO change log. Its text names 415 of the 479 vague cases, but only 23 are phrased as a
-   parseable "from X to Y";
-4. a same-name match within the same country and the same source release, e.g. `KZ-AKM` "Akmolinskaja oblast'"
-   becoming `KZ-11` with the same name. Always flagged for review;
-5. otherwise `unknown_within_country`.
-
-The change report lists every link resolved by steps 3 or 4, and every unresolved one, so reviewers can turn them
-into overrides over time.
 
 ## 10. Impact on existing code and docs
 
@@ -226,7 +208,7 @@ Open:
 
 1. **Withdrawn codes in the API.** Matching withdrawn codes is another strictness axis, with a more granular dial
    than the on/off `Relaxation`s: for example current codes only (default), codes withdrawn since a given date,
-   codes valid as of a given date, or any code ever issued. A match on a withdrawn code would report that, with its
-   successors. To be designed together with the migration functions.
+   codes valid as of a given date, or any code ever issued. A match on a withdrawn code would report that it's withdrawn. To be designed together with the migration
+   functions.
 2. **Whether withdrawn entries are members of the enumeration** (Java: `@Deprecated` enum constants), or a separate
    history API alongside it. This depends on the same functions.
