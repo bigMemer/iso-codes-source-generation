@@ -23,4 +23,7 @@ public abstract class IsoCodesExtension {
 
     /** Reviewed overrides (JSON). Optional. */
     public abstract RegularFileProperty getOverridesFile();
+
+    /** History evidence (JSON) from {@code scripts/build_history.py}. Optional. */
+    public abstract RegularFileProperty getHistoryFile();
 }

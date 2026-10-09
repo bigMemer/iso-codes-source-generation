@@ -47,14 +47,26 @@ def clone(url, path, blobless=False):
 
 
 def show(repo, rev, path):
-    """The file's text at a revision, or None. Some old files aren't valid UTF-8; those are read as Latin-1."""
+    """The file's text at a revision, or None. A few old files contain stray invalid bytes; those are replaced
+    rather than misreading the whole file."""
     result = subprocess.run(["git", "-C", str(repo), "show", f"{rev}:{path}"], capture_output=True)
     if result.returncode != 0:
         return None
+    return result.stdout.decode("utf-8", errors="replace")
+
+
+MOJIBAKE = re.compile("[\u00c2-\u00c5\u00d0\u00d1][\u0080-\u00bf]")
+
+
+def repair(name):
+    """Undoes UTF-8 text that was once stored as if it were Latin-1 (GuÃ©ra for Guéra), as some 2007 iso-codes
+    commits did."""
+    if not name or not MOJIBAKE.search(name):
+        return name
     try:
-        return result.stdout.decode("utf-8")
-    except UnicodeDecodeError:
-        return result.stdout.decode("latin-1")
+        return name.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return name
 
 
 def xml_tags(text, names):
@@ -76,7 +88,8 @@ def parse_subdivisions(path, text):
         rows = json.loads(text)["3166-2"]
         if rows and "subsets" in rows[0]:  # iso-codes 3.66 nested layout
             return None
-        return {r["code"]: {k: r[k] for k in ("name", "type", "parent") if k in r} for r in rows}
+        return {r["code"]: {k: (repair(r[k]) if k == "name" else r[k]) for k in ("name", "type", "parent") if k in r}
+                for r in rows}
     if path.endswith(".xml"):
         out, subset_type = {}, None
         for tag, a in xml_tags(text, ["iso_3166_subset", "iso_3166_2_entry"]):
@@ -86,7 +99,7 @@ def parse_subdivisions(path, text):
             code = a.get("code", "")
             if not re.fullmatch(r"[A-Z]{2}-[A-Z0-9]{1,3}", code):
                 continue
-            values = {"name": a.get("name"), "type": subset_type}
+            values = {"name": repair(a.get("name")), "type": subset_type}
             parent = a.get("parent")
             if parent:
                 values["parent"] = parent if "-" in parent else f"{code[:2]}-{parent}"
@@ -138,13 +151,13 @@ def iso_codes_snapshots(repo, paths, parser):
     snapshots = []
     for line in filter(None, commits):
         sha, date = line.split()
-        for path in paths:
-            text = show(repo, sha, path)
-            if text is not None:
-                parsed = parser(path, text)
-                if parsed:
-                    snapshots.append((date, sha, parsed))
-                break
+        # While iso-codes moved between formats, old and new files coexisted and the new one could be incomplete
+        # (in March-April 2004 the first XML held 2,237 subdivisions while the tab file still held 3,806). Read
+        # every candidate and keep the most complete.
+        parsed = [parser(path, text) for path in paths if (text := show(repo, sha, path)) is not None]
+        parsed = [p for p in parsed if p]
+        if parsed:
+            snapshots.append((date, sha, max(parsed, key=len)))
     return snapshots
 
 
@@ -187,14 +200,23 @@ def cldr_snapshots(repo):
 # ---- turning snapshots into presence intervals --------------------------------------------------------------------
 
 def intervals(snapshots):
-    """{code: [{first_seen, last_seen, gone_by, values}]}: one interval per continuous run of snapshots listing the code."""
+    """{code: [{first_seen, last_seen, gone_by, values, names}]}: one interval per continuous run of snapshots listing
+    the code. `values` are from the run's last snapshot; `names` records every name the code had during the run, so
+    a code handed to a different holder without a gap (MA-02 in 2018) is visible."""
     out, open_ = {}, {}
     for date, ref, codes in snapshots:
         for code, values in codes.items():
+            name = values.get("name")
             if code in open_:
-                open_[code].update(last_seen=date, values=values)
+                interval = open_[code]
+                interval.update(last_seen=date, values=values)
+                if name and name != interval["names"][-1]["name"]:
+                    interval["names"].append({"first_seen": date, "last_seen": date, "name": name})
+                else:
+                    interval["names"][-1]["last_seen"] = date
             else:
-                open_[code] = {"first_seen": date, "last_seen": date, "gone_by": None, "values": values}
+                open_[code] = {"first_seen": date, "last_seen": date, "gone_by": None, "values": values,
+                               "names": [{"first_seen": date, "last_seen": date, "name": name}]}
                 out.setdefault(code, []).append(open_[code])
         for code in [c for c in open_ if c not in codes]:
             open_.pop(code)["gone_by"] = date

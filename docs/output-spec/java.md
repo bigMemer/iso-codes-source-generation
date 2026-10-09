@@ -216,14 +216,17 @@ public final class MeaningChangedException extends CodeRejectedException {
 ## 9. Conformance gaps
 
 What the current emitter output is missing, against this document and the spec. Conformance is checked by
-`src/test/java/isocodes/SpecConformanceTest.java`, which runs every example in spec §6.5.
+`src/test/java/isocodes/SpecConformanceTest.java`, which runs the examples in spec §6.5 and §6.7 against the real
+dataset.
 
 | Gap | Spec |
 |-----|------|
-| No withdrawn entries, lifecycle accessors (`isWithdrawn()`, date ranges, `recordedSince()`), `allIncludingWithdrawn()`, or `@Deprecated` constants. `Relaxation.WITHDRAWN` exists but never matches anything yet. Needs the history work in docs/sources.md §9. | §4.1, §5.1 |
-| No `written_at` history checks: no `HistoryState`, `HistoryPolicy`, `HistoryCheck`, `MeaningChangedException`, `writtenAt` overloads, or `history` component on `Match`. Same dependency. | §6.7, §7.1a |
+| `writtenAt` overloads exist only for each standard's primary code field (`alpha2`, `code`). History is recorded per primary code; checking a secondary code (`alpha3`, `numeric`) against when it was written needs per-field histories. | §5.3, §6.7 |
+| Withdrawn codes whose last known values don't satisfy their type aren't entries, so they're unknown codes rather than withdrawn ones: 127 subdivisions withdrawn in 2004–2007 that iso-codes never recorded a type for, and 3 former countries without a numeric code. Listed in the aggregation report. | §4.1 |
 | No `Automatic-Module-Name` in the JAR manifest. That's set in the output repo's build, which hasn't been updated yet. | §1 here |
 
-Conforming: strictness and relaxations (format relaxations, `STRICT`/`LENIENT`), `from`/`parse`/`isValid` with
-their detailed forms, `UnknownCodeException` (via `CodeRejectedException`), null rejection, `all()` on every type,
-`toString()` as the canonical code, field accessors, and `IsoCodes.VERSION`/`SOURCES`/`LICENSE`.
+Conforming: strictness and relaxations including `WITHDRAWN`, `from`/`parse`/`isValid` with their detailed forms,
+withdrawn entries (with `@Deprecated` constants), lifecycle accessors, `all()`/`allIncludingWithdrawn()`, `written_at`
+history checks with `HistoryPolicy`, `UnknownCodeException` and `MeaningChangedException` (via
+`CodeRejectedException`), null rejection, `toString()` as the canonical code, field accessors, and
+`IsoCodes.VERSION`/`SOURCES`/`LICENSE`.

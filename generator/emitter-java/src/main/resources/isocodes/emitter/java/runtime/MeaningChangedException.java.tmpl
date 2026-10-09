@@ -1,0 +1,48 @@
+package __PACKAGE__;
+
+/** The code matches today, but may have meant something else when the value was written. */
+public final class MeaningChangedException extends CodeRejectedException {
+
+    private static final long serialVersionUID = 1L;
+
+    /** The entry that matched today; not serialized. */
+    private final transient Object entry;
+    /** The history check that failed; not serialized. */
+    private final transient HistoryCheck history;
+
+    /**
+     * Creates the exception.
+     *
+     * @param standard   the standard
+     * @param field      the code field
+     * @param input      the input exactly as passed in
+     * @param strictness the strictness used
+     * @param entry      the entry that matched today
+     * @param history    the failed history check
+     */
+    public MeaningChangedException(String standard, String field, String input, Strictness strictness, Object entry,
+            HistoryCheck history) {
+        super(UnknownCodeException.quote(input) + " may have meant something else on " + history.writtenAt()
+                + " (states: " + history.states() + ")", standard, field, input, strictness);
+        this.entry = entry;
+        this.history = history;
+    }
+
+    /**
+     * The entry the input matches today. {@code Object} because Java forbids generic exceptions.
+     *
+     * @return the entry
+     */
+    public Object entry() {
+        return entry;
+    }
+
+    /**
+     * The failed history check.
+     *
+     * @return the check
+     */
+    public HistoryCheck history() {
+        return history;
+    }
+}

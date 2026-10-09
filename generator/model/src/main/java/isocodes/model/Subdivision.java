@@ -1,6 +1,7 @@
 package isocodes.model;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /** An ISO 3166-2 country subdivision, in any schema version. */
@@ -32,5 +33,7 @@ public sealed interface Subdivision permits Subdivision.V1 {
                     FieldDef.required("type", "Type of subset of the country", null, V1::type)),
             "code",
             List.of("code"),
-            f -> new V1(f.required("code"), f.required("name"), f.optional("parent"), f.required("type")));
+            f -> new V1(f.required("code"), f.required("name"), f.optional("parent"), f.required("type")),
+            // ISO 3166-2's first edition, per ISO's catalogue: 1998-12.
+            Map.of("code", DateRange.parse("1998-12")));
 }

@@ -54,7 +54,7 @@ class JavaEmitterTest {
         JavaEmitter.write(dataset(), OPTIONS, dir);
         String country = Files.readString(dir.resolve("test/out/iso3166/Country.java"));
         assertTrue(country.startsWith("// SPDX-License-Identifier: (Apache-2.0 OR MIT) AND CC0-1.0\n// Generated from Test data 9.9."), country);
-        assertTrue(country.contains("DE(\"DE\", \"DEU\", \"🇩🇪\", \"Germany\", \"276\", null, null)"), country);
+        assertTrue(country.contains("DE(\"DE\", \"DEU\", \"🇩🇪\", \"Germany\", \"276\", null, null, false,"), country);
         assertTrue(country.contains("public static Optional<Country> fromAlpha3(String alpha3)"), country);
         assertTrue(Files.exists(dir.resolve("test/out/iso3166/SubdivisionData1.java")));
     }

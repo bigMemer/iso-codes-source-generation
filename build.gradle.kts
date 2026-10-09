@@ -22,6 +22,7 @@ isoCodes {
     basePackage = providers.gradleProperty("basePackage")
     ownLicense = "Apache-2.0 OR MIT"
     overridesFile = layout.projectDirectory.file("overrides/iso3166.json")
+    historyFile = layout.projectDirectory.file("history/iso3166-evidence.json")
 }
 
 // The plugin adds the generated sources to the main source set. They're compiled and tested here so a broken
@@ -50,7 +51,7 @@ tasks.test {
 
 // The generator's own unit tests live in the included build; run them as part of this build's check.
 tasks.check {
-    dependsOn(listOf("model", "source-isocodes", "source-cldr", "source-aggregate", "emitter-java", "gradle-plugin").map {
+    dependsOn(listOf("model", "source-isocodes", "source-cldr", "source-aggregate", "source-history", "emitter-java", "gradle-plugin").map {
         gradle.includedBuild("generator").task(":$it:check")
     })
 }

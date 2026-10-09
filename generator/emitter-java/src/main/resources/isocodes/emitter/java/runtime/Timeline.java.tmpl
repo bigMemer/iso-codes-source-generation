@@ -1,0 +1,95 @@
+package __PACKAGE__.internal;
+
+import __PACKAGE__.HistoryState;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * One code's history as a sequence of segments separated by boundaries whose dates are ranges, and the rule that
+ * turns a written-at date into the set of possible states (output specification §6.7).
+ *
+ * <p><b>Internal; not part of the API.</b>
+ *
+ * <p>Encoding, as generated: {@code holding|holding|...}, each holding {@code S|O,assignedEarliest,assignedLatest,
+ * withdrawnEarliest,withdrawnLatest,W|-}, dates as ISO days or empty when unbounded. {@code S} marks holdings by the
+ * entry's own holder, {@code O} other holders; {@code W} marks a withdrawn holding.
+ */
+public final class Timeline {
+
+    private final List<HistoryState> segments = new ArrayList<>();
+    private final List<long[]> boundaries = new ArrayList<>();
+
+    private Timeline() {}
+
+    /**
+     * Parses a timeline.
+     *
+     * @param encoded    the encoding
+     * @param introduced earliest day the code field existed, which bounds the first assignment
+     * @return the timeline
+     */
+    public static Timeline parse(String encoded, long introduced) {
+        Timeline t = new Timeline();
+        t.segments.add(HistoryState.UNASSIGNED);
+        for (String holding : encoded.split("\\|")) {
+            String[] f = holding.split(",", -1);
+            t.boundaries.add(new long[] {day(f[1], Long.MIN_VALUE), day(f[2], Long.MAX_VALUE)});
+            t.segments.add(f[0].equals("S") ? HistoryState.SAME : HistoryState.OTHER);
+            if (f[5].equals("W")) {
+                t.boundaries.add(new long[] {day(f[3], Long.MIN_VALUE), day(f[4], Long.MAX_VALUE)});
+                t.segments.add(HistoryState.WITHDRAWN);
+            }
+        }
+        long[] first = t.boundaries.get(0);
+        first[0] = Math.max(first[0], introduced);
+        first[1] = Math.max(first[1], first[0]);
+        // Boundaries are in order, so each one's range is also bounded by its neighbours'.
+        for (int i = 1; i < t.boundaries.size(); i++) {
+            t.boundaries.get(i)[0] = Math.max(t.boundaries.get(i)[0], t.boundaries.get(i - 1)[0]);
+        }
+        for (int i = t.boundaries.size() - 2; i >= 0; i--) {
+            t.boundaries.get(i)[1] = Math.min(t.boundaries.get(i)[1], t.boundaries.get(i + 1)[1]);
+        }
+        return t;
+    }
+
+    private static long day(String text, long unbounded) {
+        return text.isEmpty() ? unbounded : LocalDate.parse(text).toEpochDay();
+    }
+
+    /**
+     * The states the code could have been in on a date.
+     *
+     * @param writtenAt       the date
+     * @param recordedSince   the earliest date the library has evidence for this code
+     * @param introducedFirst the first day the code field could have existed
+     * @param introducedLast  the last day by which the code field certainly existed
+     * @return the possible states
+     */
+    public Set<HistoryState> statesAt(LocalDate writtenAt, LocalDate recordedSince, long introducedFirst,
+            long introducedLast) {
+        long w = writtenAt.toEpochDay();
+        if (w < introducedFirst) {
+            return EnumSet.of(HistoryState.PREDATES_STANDARD);
+        }
+        if (writtenAt.isBefore(recordedSince)) {
+            return EnumSet.of(HistoryState.UNRECORDED);
+        }
+        EnumSet<HistoryState> states = EnumSet.noneOf(HistoryState.class);
+        int n = boundaries.size();
+        for (int segment = 0; segment <= n; segment++) {
+            boolean startsByThen = segment == 0 || boundaries.get(segment - 1)[0] <= w;
+            boolean endsAfter = segment == n || boundaries.get(segment)[1] > w;
+            if (startsByThen && endsAfter) {
+                states.add(segments.get(segment));
+            }
+        }
+        if (w <= introducedLast) {
+            states.add(HistoryState.PREDATES_STANDARD);
+        }
+        return states;
+    }
+}

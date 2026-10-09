@@ -3,7 +3,7 @@ package __PACKAGE__;
 import java.util.Objects;
 
 /** A code was rejected because of the data, not because the API was misused. */
-public abstract sealed class CodeRejectedException extends IllegalArgumentException permits UnknownCodeException {
+public abstract sealed class CodeRejectedException extends IllegalArgumentException permits UnknownCodeException, MeaningChangedException {
 
     private static final long serialVersionUID = 1L;
 

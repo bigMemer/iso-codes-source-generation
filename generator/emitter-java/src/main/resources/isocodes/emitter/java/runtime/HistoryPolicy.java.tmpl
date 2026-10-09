@@ -1,0 +1,37 @@
+package __PACKAGE__;
+
+import java.util.Set;
+
+/**
+ * When a history check passes. Each policy passes everything the previous one passes.
+ *
+ * <p>Unrelated to {@link Strictness#STRICT}.
+ */
+public enum HistoryPolicy {
+    /** Passes only {@code {SAME}}: a certain, unchanged meaning. */
+    EXACT,
+    /** Passes {@code {SAME}} or {@code {UNRECORDED}}. */
+    STRICT,
+    /** Passes any set without {@link HistoryState#OTHER}: fails on any possible change of meaning. The default. */
+    PESSIMISTIC,
+    /** Passes anything except exactly {@code {OTHER}}: fails only on a certain change of meaning. */
+    OPTIMISTIC,
+    /** Passes anything. */
+    PERMISSIVE;
+
+    /**
+     * Whether a set of possible states passes this policy.
+     *
+     * @param states the possible states
+     * @return true if it passes
+     */
+    public boolean passes(Set<HistoryState> states) {
+        return switch (this) {
+            case EXACT -> states.equals(Set.of(HistoryState.SAME));
+            case STRICT -> states.equals(Set.of(HistoryState.SAME)) || states.equals(Set.of(HistoryState.UNRECORDED));
+            case PESSIMISTIC -> !states.contains(HistoryState.OTHER);
+            case OPTIMISTIC -> !states.equals(Set.of(HistoryState.OTHER));
+            case PERMISSIVE -> true;
+        };
+    }
+}

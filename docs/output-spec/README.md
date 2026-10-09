@@ -504,21 +504,24 @@ Matching with `STRICT` plus `WITHDRAWN`, so withdrawn codes match. ✓ passes, �
 | `IN-OR` (withdrawn 2023-11-23) | 2020-01-01 | `{SAME}` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `GT-AV` (withdrawn 2021-11-25) | 2022-03-01 | `{WITHDRAWN}` | ✗ | ✗ | ✓ | ✓ | ✓ |
 | `SS` (assigned 2011-08-09) | 2005-01-01 | `{UNASSIGNED}` | ✗ | ✗ | ✓ | ✓ | ✓ |
-| `CS` (Serbia and Montenegro; was Czechoslovakia until 1993) | 1990-01-01 | `{OTHER}` | ✗ | ✗ | ✗ | ✗ | ✓ |
+| `CS` (Serbia and Montenegro; was Czechoslovakia until 1993) | 1990-01-01 | `{OTHER, UNASSIGNED}`: Czechoslovakia's 1974 assignment date isn't in the sources, so "not yet assigned" can't be ruled out | ✗ | ✗ | ✗ | ✓ | ✓ |
+| `MA-02` (L'Oriental since Morocco's 2018 reorganisation; another region before) | 2012-01-01 | `{OTHER}` | ✗ | ✗ | ✗ | ✗ | ✓ |
 | a withdrawn code whose withdrawal is known only as "no later than 2021-10-27" | 2020-05-01 | `{SAME, WITHDRAWN}` | ✗ | ✗ | ✓ | ✓ | ✓ |
 | a code that passed directly between two holders in a known year | mid-year | `{OTHER, SAME}` | ✗ | ✗ | ✗ | ✓ | ✓ |
 | `BS-NP` (recorded since 2004-02-22) | 1997-01-01 | `{PREDATES_STANDARD}` | ✗ | ✗ | ✓ | ✓ | ✓ |
 | `276` via `Country.from_numeric` | 1978-01-01 | `{PREDATES_STANDARD}` (numeric codes date from 1981) | ✗ | ✗ | ✓ | ✓ | ✓ |
-| `DE` via `Country.from_alpha_2` | 1978-01-01 | `{SAME}`, if West Germany's `DE` is recorded as the same holder | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `DE` via `Country.from_alpha_2` | 1978-01-01 | `{UNASSIGNED, SAME}`: `DE`'s assignment date isn't in the sources either | ✗ | ✗ | ✓ | ✓ | ✓ |
 | `BS-NP` | 2001-01-01 | `{UNRECORDED}` | ✗ | ✓ | ✓ | ✓ | ✓ |
 | `BS-NP` | 2005-01-01 | `{SAME}` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `BS-NP` (withdrawn 2010-06-30, reassigned to the same region 2018-11-26) | 2012-01-01 | `{WITHDRAWN}` | ✗ | ✗ | ✓ | ✓ | ✓ |
 | `BS-NP` | 2019-01-01 | `{SAME}` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `US-CA` (recorded since 2004-02-22) | 2001-01-01 | `{UNRECORDED}` | ✗ | ✓ | ✓ | ✓ | ✓ |
 
+Every example above without a hypothetical description is the real output of the current dataset.
+
 The library records only *when* earlier holders held a code, nothing else about them. It reports that the meaning
 changed, not what it used to be. Like all of the library's history, this is best-effort
-([§4.1](#41-withdrawn-entries)).
+([§4.1](#41-withdrawn-entries)); how it's derived is in [sources.md](../sources.md) §9.
 
 ## 7. Failure
 
@@ -602,8 +605,8 @@ The generator side of this spec:
 
 - [ ] Fail the build on lenient-match collisions ([§6.4](#64-matching-algorithm)). Not yet checked by
   `IsoCodesDataset` validation, though current data has none.
-- [ ] Withdrawn entries and history ([§4.1](#41-withdrawn-entries)). Requires the aggregated sources in
-  [sources.md](../sources.md); today's iso-codes-only generator has no withdrawn entries.
+- [x] Withdrawn entries and history ([§4.1](#41-withdrawn-entries)), from the history evidence described in
+  [sources.md](../sources.md) §9.
 - [x] Every code value is canonical ([§6.1](#61-canonical-form)): each code field in the model has a format pattern
   enforced by validation.
 - [ ] Check that every ISO 3166-2 code's prefix is an ISO 3166-1 `alpha_2` ([§6.1](#61-canonical-form)). True of all

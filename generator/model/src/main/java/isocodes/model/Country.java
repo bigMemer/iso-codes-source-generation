@@ -1,6 +1,7 @@
 package isocodes.model;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /** An ISO 3166-1 country, in any schema version. */
@@ -64,7 +65,10 @@ public sealed interface Country permits Country.V1, Country.V2 {
             "alpha_2",
             List.of("alpha_2", "alpha_3", "numeric"),
             f -> new V2(f.required("alpha_2"), f.required("alpha_3"), f.required("flag"), f.required("name"),
-                    f.required("numeric"), f.optional("official_name"), f.optional("common_name")));
+                    f.required("numeric"), f.optional("official_name"), f.optional("common_name")),
+            // ISO 3166 (1974) had alphabetic codes; numeric codes arrived with the second edition (1981).
+            Map.of("alpha_2", DateRange.parse("1974"), "alpha_3", DateRange.parse("1974"),
+                    "numeric", DateRange.parse("1981")));
 
     /** A flag emoji is the alpha-2 code spelled in Unicode regional indicator symbols. */
     static String flagOf(String alpha2) { // public: interface members can't be package-private

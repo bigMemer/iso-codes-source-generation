@@ -1,17 +1,24 @@
 package __PACKAGE__.internal;
 
+import __PACKAGE__.HistoryCheck;
+import __PACKAGE__.HistoryPolicy;
+import __PACKAGE__.HistoryState;
 import __PACKAGE__.Match;
+import __PACKAGE__.MeaningChangedException;
 import __PACKAGE__.Relaxation;
 import __PACKAGE__.Strictness;
 import __PACKAGE__.UnknownCodeException;
+import java.time.LocalDate;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
- * Matches input against one code field, following the output specification's matching algorithm (§6.4).
+ * Matches input against one code field, following the output specification's matching algorithm (§6.4), and checks
+ * matches against history (§6.7).
  *
  * <p><b>Internal; not part of the API.</b> Public only so generated types in other packages can use it.
  *
@@ -19,26 +26,64 @@ import java.util.Optional;
  */
 public final class Lookup<T> {
 
+    /**
+     * How to read an entry's history. Only the primary code field has one.
+     *
+     * @param <T> the entry type
+     */
+    public interface History<T> {
+        /**
+         * The entry's encoded timeline.
+         *
+         * @param entry the entry
+         * @return the encoding
+         */
+        String timeline(T entry);
+
+        /**
+         * The earliest date the library has evidence for the entry's code.
+         *
+         * @param entry the entry
+         * @return the date
+         */
+        LocalDate recordedSince(T entry);
+    }
+
     private final String standard;
     private final String field;
     private final boolean numeric;
-    private final Map<String, T> exact;
-    private final Map<String, T> folded = new HashMap<>();
+    private final Map<String, T> active;
+    private final Map<String, T> withdrawn;
+    private final Map<String, T> activeFolded = new HashMap<>();
+    private final Map<String, T> withdrawnFolded = new HashMap<>();
+    private final long introducedFirst;
+    private final long introducedLast;
+    private final History<T> history;
 
     /**
      * Creates a lookup.
      *
-     * @param standard the standard, e.g. {@code 3166-1}
-     * @param field    the code field, e.g. {@code alpha_2}
-     * @param numeric  whether the field is a numeric code, which enables {@link Relaxation#NUMERIC_PADDING}
-     * @param byValue  every entry by its canonical value for the field
+     * @param standard        the standard, e.g. {@code 3166-1}
+     * @param field           the code field, e.g. {@code alpha_2}
+     * @param numeric         whether the field is a numeric code, which enables {@link Relaxation#NUMERIC_PADDING}
+     * @param active          every active entry by its canonical value for the field
+     * @param withdrawn       withdrawn entries by value; where several share one, the most recently withdrawn
+     * @param introducedFirst first possible day ISO published the field, as an epoch day
+     * @param introducedLast  last possible day ISO published the field, as an epoch day
+     * @param history         how to read entries' history, or null if the field has none
      */
-    public Lookup(String standard, String field, boolean numeric, Map<String, T> byValue) {
+    public Lookup(String standard, String field, boolean numeric, Map<String, T> active, Map<String, T> withdrawn,
+            long introducedFirst, long introducedLast, History<T> history) {
         this.standard = standard;
         this.field = field;
         this.numeric = numeric;
-        this.exact = Map.copyOf(byValue);
-        byValue.forEach((value, entry) -> folded.put(asciiUpper(value), entry));
+        this.active = Map.copyOf(active);
+        this.withdrawn = Map.copyOf(withdrawn);
+        active.forEach((value, entry) -> activeFolded.put(asciiUpper(value), entry));
+        withdrawn.forEach((value, entry) -> withdrawnFolded.put(asciiUpper(value), entry));
+        this.introducedFirst = introducedFirst;
+        this.introducedLast = introducedLast;
+        this.history = history;
     }
 
     /**
@@ -73,18 +118,50 @@ public final class Lookup<T> {
             observed.add(Relaxation.NUMERIC_PADDING);
         }
 
-        T entry = exact.get(s);
+        boolean allowWithdrawn = strictness.allows(Relaxation.WITHDRAWN);
+        // Exact comparison against every candidate first; an active entry wins over a withdrawn one.
+        T entry = active.get(s);
+        if (entry == null && allowWithdrawn && (entry = withdrawn.get(s)) != null) {
+            observed.add(Relaxation.WITHDRAWN);
+        }
         if (entry == null && strictness.allows(Relaxation.ASCII_CASE)) {
-            entry = folded.get(asciiUpper(s));
+            String folded = asciiUpper(s);
+            entry = activeFolded.get(folded);
+            if (entry == null && allowWithdrawn && (entry = withdrawnFolded.get(folded)) != null) {
+                observed.add(Relaxation.WITHDRAWN);
+            }
             if (entry != null) {
                 observed.add(Relaxation.ASCII_CASE);
             }
         }
-        return entry == null ? Optional.empty() : Optional.of(new Match<>(entry, observed));
+        return entry == null ? Optional.empty() : Optional.of(new Match<>(entry, observed, Optional.empty()));
     }
 
     /**
-     * The exception to throw when {@link #match} finds nothing.
+     * Matches the input and checks the match against history.
+     *
+     * @param input      the input
+     * @param strictness the strictness
+     * @param writtenAt  when the value was written
+     * @param policy     when the history check passes
+     * @return the match, with its history check, or empty if nothing matches today
+     */
+    public Optional<Match<T>> match(String input, Strictness strictness, LocalDate writtenAt, HistoryPolicy policy) {
+        Objects.requireNonNull(writtenAt, "writtenAt");
+        Objects.requireNonNull(policy, "history");
+        if (history == null) {
+            throw new UnsupportedOperationException("No history for " + field);
+        }
+        return match(input, strictness).map(m -> {
+            Set<HistoryState> states = Timeline.parse(history.timeline(m.entry()), introducedFirst)
+                    .statesAt(writtenAt, history.recordedSince(m.entry()), introducedFirst, introducedLast);
+            return new Match<>(m.entry(), m.relaxations(),
+                    Optional.of(new HistoryCheck(writtenAt, states, policy, policy.passes(states))));
+        });
+    }
+
+    /**
+     * The exception to throw when nothing matches.
      *
      * @param input      the input
      * @param strictness the strictness
@@ -92,6 +169,28 @@ public final class Lookup<T> {
      */
     public UnknownCodeException unknown(String input, Strictness strictness) {
         return new UnknownCodeException(standard, field, input, strictness);
+    }
+
+    /**
+     * The exception to throw when a match's history check failed.
+     *
+     * @param input      the input
+     * @param strictness the strictness
+     * @param match      the match whose check failed
+     * @return the exception
+     */
+    public MeaningChangedException meaningChanged(String input, Strictness strictness, Match<T> match) {
+        return new MeaningChangedException(standard, field, input, strictness, match.entry(), match.history().orElseThrow());
+    }
+
+    /**
+     * Whether a match passes, i.e. has no failed history check.
+     *
+     * @param match the match
+     * @return true if it passes
+     */
+    public static boolean passes(Match<?> match) {
+        return match.history().map(HistoryCheck::passed).orElse(true);
     }
 
     /** Unicode White_Space, which differs from {@link Character#isWhitespace} (e.g. it includes U+00A0). */

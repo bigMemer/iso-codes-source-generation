@@ -1,0 +1,37 @@
+package __PACKAGE__;
+
+import java.time.LocalDate;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.Objects;
+import java.util.Set;
+
+/**
+ * The result of checking a matched code against when its value was written.
+ *
+ * @param writtenAt when the value was written
+ * @param states    every state the code could have been in then
+ * @param policy    the policy applied
+ * @param passed    whether {@code states} passes {@code policy}
+ */
+public record HistoryCheck(LocalDate writtenAt, Set<HistoryState> states, HistoryPolicy policy, boolean passed) {
+
+    /**
+     * Creates a check result.
+     *
+     * @param writtenAt when the value was written
+     * @param states    the possible states
+     * @param policy    the policy
+     * @param passed    whether it passed; must agree with the policy
+     */
+    public HistoryCheck {
+        Objects.requireNonNull(writtenAt, "writtenAt");
+        Objects.requireNonNull(policy, "policy");
+        EnumSet<HistoryState> copy = EnumSet.noneOf(HistoryState.class);
+        copy.addAll(Objects.requireNonNull(states, "states"));
+        states = Collections.unmodifiableSet(copy);
+        if (passed != policy.passes(states)) {
+            throw new IllegalArgumentException("passed must agree with the policy");
+        }
+    }
+}

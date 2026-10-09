@@ -26,7 +26,12 @@ final class Runtime {
             new Template("Validation", ""),
             new Template("CodeRejectedException", ""),
             new Template("UnknownCodeException", ""),
-            new Template("Lookup", "internal"));
+            new Template("MeaningChangedException", ""),
+            new Template("HistoryState", ""),
+            new Template("HistoryPolicy", ""),
+            new Template("HistoryCheck", ""),
+            new Template("Lookup", "internal"),
+            new Template("Timeline", "internal"));
 
     static void write(EmitOptions options, Path outputDir) {
         String header = "// SPDX-License-Identifier: " + options.ownLicense().orElse("NOASSERTION") + "\n"

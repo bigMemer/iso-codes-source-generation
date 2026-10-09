@@ -18,8 +18,13 @@ What every generated library must look like and how it behaves, in any language,
 
 CLDR is the *backbone* (proposes which codes exist; usually first to change), iso-codes the *authority* (trusted to
 be right, sometimes stale), and `overrides/iso3166.json` holds reviewed corrections, each with a reason and evidence.
-The design is in [docs/sources.md](docs/sources.md). Implemented so far: CLDR, iso-codes, overrides and the
-aggregation rules. Not yet: Wikidata as a gap filler, and history (withdrawn entries, `written_at`).
+The design is in [docs/sources.md](docs/sources.md). Implemented: CLDR, iso-codes, overrides, the aggregation
+rules, and history (withdrawn entries, lifecycle dates, `written_at` checks). Not yet: Wikidata as a gap filler, and
+overrides for history.
+
+History comes from `history/iso3166-evidence.json`, which `scripts/build_history.py` regenerates from iso-codes'
+git history, CLDR's releases and ISO's change log (needs git and network; takes about 10 seconds with cached
+clones). Commit the result and review its diff like any other change.
 
 Source versions and the dataset version are set in `gradle.properties` (`cldrVersion`, `isoCodesVersion`,
 `datasetVersion`). Every build writes `build/reports/iso-codes/aggregation.md`, listing everything aggregation

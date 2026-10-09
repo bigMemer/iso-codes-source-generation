@@ -2,6 +2,7 @@ package isocodes.model;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 
 /**
@@ -22,8 +23,8 @@ public record IsoCodesDataset(
     public static IsoCodesDataset fromSource(SourceData source) {
         IsoCodesDataset dataset = new IsoCodesDataset(
                 source.sources(),
-                upcast(Country.DEFINITION, source.countries(), Country::toLatest),
-                upcast(Subdivision.DEFINITION, source.subdivisions(), Subdivision::toLatest));
+                upcast(Country.DEFINITION, source.countries(), Country::toLatest, source.lifecycles()),
+                upcast(Subdivision.DEFINITION, source.subdivisions(), Subdivision::toLatest, source.lifecycles()));
         List<String> problems = new ArrayList<>();
         for (Table<?> table : dataset.tables()) {
             Validator.check(table, problems);
@@ -34,8 +35,10 @@ public record IsoCodesDataset(
         return dataset;
     }
 
-    private static <A, L> Table<L> upcast(StandardDef<L> standard, List<? extends A> rows, Function<A, L> toLatest) {
-        return new Table<>(standard, rows.stream().map(toLatest).toList());
+    private static <A, L> Table<L> upcast(StandardDef<L> standard, List<? extends A> rows, Function<A, L> toLatest,
+            Map<String, Map<String, Lifecycle>> lifecycles) {
+        return new Table<>(standard, rows.stream().map(toLatest).toList(),
+                lifecycles.getOrDefault(standard.id(), Map.of()));
     }
 
     public IsoCodesDataset {

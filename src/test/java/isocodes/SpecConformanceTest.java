@@ -138,7 +138,106 @@ class SpecConformanceTest {
         for (Subdivision subdivision : Subdivision.all()) {
             assertSame(subdivision, Subdivision.parseCode(subdivision.toString()));
         }
-        assertEquals(Country.values().length, Country.all().size());
+        assertEquals(Country.values().length, Country.allIncludingWithdrawn().size());
+        assertTrue(Country.all().stream().noneMatch(Country::isWithdrawn));
+        assertTrue(Country.allIncludingWithdrawn().stream().anyMatch(Country::isWithdrawn));
+    }
+
+    // ---- §4.1, §6.5: withdrawn entries ------------------------------------------------------------------------
+
+    private static final Strictness STRICT_W = Strictness.STRICT.with(Relaxation.WITHDRAWN);
+    private static final Strictness LENIENT_W = Strictness.LENIENT.with(Relaxation.WITHDRAWN);
+
+    @Test
+    void withdrawnCodesMatchOnlyWithTheWithdrawnRelaxation() {
+        assertFalse(Country.fromAlpha2("CS").isPresent());
+        Match<Country> cs = Country.fromAlpha2Detailed("CS", STRICT_W).orElseThrow();
+        assertTrue(cs.entry().isWithdrawn());
+        assertEquals("Serbia and Montenegro", cs.entry().englishName());
+        assertEquals(Set.of(Relaxation.WITHDRAWN), cs.relaxations());
+        assertEquals(Optional.of(java.time.LocalDate.parse("2006-09-26")), cs.entry().withdrawnLatest());
+        assertFalse(Country.fromAlpha2("cs", STRICT_W).isPresent());
+        assertFalse(Country.fromAlpha2("cs", Strictness.LENIENT).isPresent());
+        assertEquals(Set.of(ASCII_CASE, Relaxation.WITHDRAWN),
+                Country.fromAlpha2Detailed("cs", LENIENT_W).orElseThrow().relaxations());
+    }
+
+    @Test
+    void reusedCodesPreferTheActiveHolder() {
+        Match<Country> ai = Country.fromAlpha2Detailed("AI", STRICT_W).orElseThrow();
+        assertEquals("Anguilla", ai.entry().englishName());
+        assertEquals(Set.of(), ai.relaxations());
+        assertEquals("TF", Country.parseAlpha3("ATF", STRICT_W).alpha2(), "today's French Southern Territories");
+    }
+
+    @Test
+    void withdrawnSubdivisions() {
+        assertFalse(Subdivision.fromCode("IN-OR").isPresent());
+        Subdivision inOr = Subdivision.parseCode("IN-OR", STRICT_W);
+        assertTrue(inOr.isWithdrawn());
+        assertEquals(Optional.of(java.time.LocalDate.parse("2023-11-23")), inOr.withdrawnEarliest());
+        assertFalse(Subdivision.fromCode("IN-XX", LENIENT_W).isPresent());
+        assertTrue(Subdivision.all().stream().noneMatch(Subdivision::isWithdrawn));
+    }
+
+    // ---- §6.7: written_at -------------------------------------------------------------------------------------
+
+    private static Set<com.wwwdottheinternetdotcom.isocodes.HistoryState> states(String code, String writtenAt) {
+        return Subdivision.fromCodeDetailed(code, STRICT_W, java.time.LocalDate.parse(writtenAt),
+                        com.wwwdottheinternetdotcom.isocodes.HistoryPolicy.PERMISSIVE)
+                .orElseThrow().history().orElseThrow().states();
+    }
+
+    private static Set<com.wwwdottheinternetdotcom.isocodes.HistoryState> countryStates(String code, String writtenAt) {
+        return Country.fromAlpha2Detailed(code, STRICT_W, java.time.LocalDate.parse(writtenAt),
+                        com.wwwdottheinternetdotcom.isocodes.HistoryPolicy.PERMISSIVE)
+                .orElseThrow().history().orElseThrow().states();
+    }
+
+    @Test
+    void writtenAtStates() {
+        var S = com.wwwdottheinternetdotcom.isocodes.HistoryState.class;
+        assertEquals(Set.of(hs("PREDATES_STANDARD")), states("BS-NP", "1997-01-01"));
+        assertEquals(Set.of(hs("UNRECORDED")), states("BS-NP", "2001-01-01"));
+        assertEquals(Set.of(hs("SAME")), states("BS-NP", "2005-01-01"));
+        assertEquals(Set.of(hs("WITHDRAWN")), states("BS-NP", "2012-01-01"));
+        assertEquals(Set.of(hs("SAME")), states("BS-NP", "2019-01-01"));
+        assertEquals(Set.of(hs("UNRECORDED")), states("US-CA", "2001-01-01"));
+        assertEquals(Set.of(hs("SAME")), states("IN-OR", "2020-01-01"));
+        assertEquals(Set.of(hs("WITHDRAWN")), states("GT-AV", "2022-03-01"));
+        assertEquals(Set.of(hs("UNASSIGNED")), countryStates("SS", "2005-01-01"));
+        assertTrue(countryStates("CS", "1990-01-01").contains(hs("OTHER")), "Czechoslovakia then");
+        assertEquals(Set.of(hs("SAME")), countryStates("CS", "2005-01-01"));
+        assertEquals(Set.of(hs("SAME")), countryStates("DE", "2020-01-01"));
+        assertEquals(Set.of(hs("PREDATES_STANDARD")), countryStates("DE", "1970-01-01"));
+    }
+
+    private static com.wwwdottheinternetdotcom.isocodes.HistoryState hs(String name) {
+        return com.wwwdottheinternetdotcom.isocodes.HistoryState.valueOf(name);
+    }
+
+    @Test
+    void historyPolicyDecidesValidity() {
+        var then = java.time.LocalDate.parse("1990-01-01");
+        // Default PESSIMISTIC: a possible change of meaning fails.
+        assertFalse(Country.fromAlpha2("CS", STRICT_W, then).isPresent());
+        assertFalse(Country.isValidAlpha2("CS", STRICT_W, then));
+        var e = assertThrows(com.wwwdottheinternetdotcom.isocodes.MeaningChangedException.class,
+                () -> Country.parseAlpha2("CS", STRICT_W, then));
+        assertTrue(e.history().states().contains(hs("OTHER")));
+        assertTrue(e instanceof com.wwwdottheinternetdotcom.isocodes.CodeRejectedException);
+        // The detailed form still returns the match, with the failed check.
+        Match<Country> m = Country.parseAlpha2Detailed("CS", STRICT_W, then);
+        assertFalse(m.history().orElseThrow().passed());
+        assertFalse(Country.isValidAlpha2Detailed("CS", STRICT_W, then).isValid());
+        assertTrue(Country.isValidAlpha2Detailed("CS", STRICT_W, then).match().isPresent());
+        // PERMISSIVE never fails; GT-AV written after its withdrawal passes PESSIMISTIC but not STRICT.
+        assertTrue(Country.isValidAlpha2("CS", STRICT_W, then, com.wwwdottheinternetdotcom.isocodes.HistoryPolicy.PERMISSIVE));
+        var after = java.time.LocalDate.parse("2022-03-01");
+        assertTrue(Subdivision.isValidCode("GT-AV", STRICT_W, after));
+        assertFalse(Subdivision.isValidCode("GT-AV", STRICT_W, after, com.wwwdottheinternetdotcom.isocodes.HistoryPolicy.STRICT));
+        // Unknown today is still UnknownCodeException.
+        assertThrows(UnknownCodeException.class, () -> Country.parseAlpha2("XX", STRICT_W, then));
     }
 
     @Test

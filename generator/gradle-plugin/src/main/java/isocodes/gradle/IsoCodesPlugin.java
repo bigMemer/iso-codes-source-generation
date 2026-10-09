@@ -21,6 +21,7 @@ public class IsoCodesPlugin implements Plugin<Project> {
             task.getBasePackage().set(extension.getBasePackage());
             task.getOwnLicense().set(extension.getOwnLicense());
             task.getOverridesFile().set(extension.getOverridesFile());
+            task.getHistoryFile().set(extension.getHistoryFile());
             task.getReportFile().set(project.getLayout().getBuildDirectory().file("reports/iso-codes/aggregation.md"));
             task.getDownloadDirectory().set(project.getLayout().getBuildDirectory().dir("downloads"));
             task.getOutputDirectory().set(project.getLayout().getBuildDirectory().dir("generated/sources/iso-codes"));

@@ -1,6 +1,7 @@
 # Data sources and aggregation
 
-**Status:** §1–§4, §7 and §8 implemented (CLDR, iso-codes, overrides); Wikidata and history (§5, §9) not yet.
+**Status:** implemented except Wikidata as a gap filler and overrides for history. §9.3 describes how history is
+worked out.
 **Scope:** ISO 3166-1 and ISO 3166-2.
 
 How the generator combines several imperfect sources into one dataset, and how changes reach the generated
@@ -179,8 +180,9 @@ parents.
 Missing dates are explicit (`unknown`), never guessed silently.
 
 **Recorded since.** Each code records the earliest date from which the sources account for its status
-continuously (output spec §5.1 `recorded_since`): usually iso-codes' first commit (2004-02-22) for codes it had
-then, or the first source snapshot or dated change-log entry otherwise. Before ISO first published a kind of
+continuously (output spec §5.1 `recorded_since`): 2004-02-22 for subdivisions, when iso-codes' history begins (from
+then on every commit lists every code, so a code's absence is evidence too), and 1974-01-01 for countries, because
+ISO 3166-3 records every country-level withdrawal since then. Before ISO first published a kind of
 code, every code of that kind is `PREDATES_STANDARD`: ISO 3166-1 alpha-2 and alpha-3 date from 1974, numeric from
 1981, and ISO 3166-2 from 1998-12 (per ISO's catalogue). Every date is stored as an interval: an exact day,
 a coarser precision (`1993`), or only a latest possible date (the first source release showing the change).
@@ -200,7 +202,7 @@ bound.
 
 | Source | Gives | Depth |
 |--------|-------|-------|
-| iso-codes git history | First and last appearance of each code and each value | Every commit since 2004-02-22: a tab-separated file until 2006, XML until 2016, JSON since. Its first commit already has 4,489 subdivision codes, so most codes are recorded from 2004. |
+| iso-codes git history | First and last appearance of each code and each value | Every commit since 2004-02-22: a tab-separated file until 2006, XML until 2016, JSON since. Its first commit already has 3,768 subdivision codes, so most codes are recorded from 2004. |
 | CLDR release history | The same, from CLDR's side | 31 releases, CLDR 28 (2015) onward |
 | CLDR alias table | Which codes are withdrawn, and why: 599 subdivisions withdrawn (`deprecated`), 27 `overlong`, 27 country codes. Only the status and reason are used; CLDR's replacement values are ignored. | Current release, cumulative |
 | iso3166-updates change log | ISO's effective dates and change descriptions (free text), 909 entries | Back to the 1990s. Doesn't always name what it removes: its 2010 Bahamas entry ("21 districts → 32 districts") never mentions that `BS-NP` was withdrawn, and its 2018 entry calls the re-assignment "Subdivision added". The iso-codes history shows both. |
@@ -210,6 +212,44 @@ bound.
 
 Withdrawn ISO 3166-1 codes are exactly what ISO 3166-3 lists, so 3166-3 comes back as history data, not as a
 separate standard type.
+
+### 9.3 How history is worked out
+
+Two steps, so that evidence and conclusions can be reviewed separately.
+
+**Evidence.** `scripts/build_history.py` reads iso-codes' git history, every CLDR release and ISO's change log, and
+writes `history/iso3166-evidence.json`: for each code and source, the runs of snapshots that listed it (first seen,
+last seen, gone by), the names it had during each run, and the change-log entries naming it. It draws no
+conclusions. It's committed, rerun occasionally, and reviewed as a diff. Along the way it handles:
+
+- 77 malformed historical XML snapshots, read by a tolerant tag scan instead of an XML parser;
+- the March–April 2004 format transition, when a half-finished XML file sat next to the complete tab file (the most
+  complete file at each commit wins);
+- text once stored with the wrong encoding (`GuÃ©ra` for `Guéra`), repaired;
+- CLDR 28's different code spelling (`AD-02` rather than `ad02`).
+
+**Reasoning.** The generator's `source-history` module turns evidence into lifecycles:
+
+| Question | Rule |
+|----------|------|
+| Which periods did a code have a holder? | Each run in iso-codes (the authority). Gaps of up to 31 days with the same holder are glitches and closed (35 codes). |
+| Is a later period the same holder? | Yes if the names match ignoring case, accents and punctuation, one contains the other, or they're at least 75% similar (`Serrai`, `Serres`). |
+| Did the holder change *within* a run? | Only if the name changed dissimilarly **and** moved between codes at that moment: the new name was on another code until the switch (MA-02's L'Oriental had been MA-04), or the old name lands on another code then (IR-07's Tehrān became IR-23). A switch to the local-language name doesn't move between codes. |
+| When was a code assigned? | No later than the first sighting (CLDR's, if earlier). Exactly on the date of a change-log entry adding it ("Subdivision added: BS-NP"), if there is one. |
+| When was it withdrawn, or handed over? | No later than the first source to drop it. Exactly per a change-log entry naming it ("from IN-OR to IN-OD"). Otherwise on one of the **country's** change-log dates in the range, since ISO only changes subdivisions in updates its log records: BS-NP's only candidate is the 2010-06-30 Bahamas restructuring. |
+| Countries? | The same, plus ISO 3166-3's former holders with their withdrawal dates (CS: Czechoslovakia until 1993-06-15, then Serbia and Montenegro until 2006-09-26). New countries are assigned on their "Assign code elements" date (SS: 2011-08-09). |
+
+Everything uncertain is reported in the aggregation report's history section for review: holder changes (166
+handovers within runs, plus changes across gaps), closed glitches, codes only CLDR ever listed, and withdrawn codes
+that can't be built (127 subdivisions iso-codes never gave a type, 3 former countries without a numeric code).
+Some holder changes are probably still the same place written differently (`FI-11` Pirkanmaa / Birkaland); others
+look like iso-codes data errors (`FR-972` was "Guyane" for four months in 2007). Overrides for history, to settle
+such cases, aren't implemented yet.
+
+**Known limits:**
+- Assignment dates before our evidence begins are unknown, so for pre-2004 codes `written_at` can't rule out "not
+  yet assigned": `DE` written in 1978 gives `{UNASSIGNED, SAME}`.
+- History is per primary code, so `written_at` checks exist only for `alpha_2` and subdivision `code`.
 
 ## 10. Impact on existing code and docs
 

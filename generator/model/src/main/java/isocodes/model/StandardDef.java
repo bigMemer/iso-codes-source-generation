@@ -14,6 +14,7 @@ import java.util.function.Function;
  * @param primaryKey   id of the required, unique field that identifies an entry
  * @param uniqueFields ids of fields whose present values are unique across entries, primary key first
  * @param fromFields   builds a record from field values keyed by field id; absent keys are absent values
+ * @param introduced   when ISO first published each code field, by field id (output spec §6.7)
  * @param <T>          the newest record type
  */
 public record StandardDef<T>(
@@ -22,11 +23,13 @@ public record StandardDef<T>(
         List<FieldDef<T>> fields,
         String primaryKey,
         List<String> uniqueFields,
-        Function<FieldValues, T> fromFields) {
+        Function<FieldValues, T> fromFields,
+        Map<String, DateRange> introduced) {
 
     public StandardDef {
         fields = List.copyOf(fields);
         uniqueFields = List.copyOf(uniqueFields);
+        introduced = Map.copyOf(introduced);
         if (uniqueFields.isEmpty() || !uniqueFields.get(0).equals(primaryKey)) {
             throw new IllegalArgumentException(id + ": uniqueFields must start with the primary key");
         }

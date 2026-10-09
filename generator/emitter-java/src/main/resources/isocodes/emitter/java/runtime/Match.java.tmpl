@@ -3,25 +3,30 @@ package __PACKAGE__;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
- * A successful lookup: the entry that matched, and the relaxations the match materially needed.
+ * A successful lookup: the entry that matched, the relaxations the match materially needed, and, if a written-at
+ * date was given, the history check.
  *
  * @param entry       the matched entry
  * @param relaxations the relaxations needed; empty if the input was already canonical
+ * @param history     the history check, present exactly when a written-at date was given
  * @param <T>         the entry type
  */
-public record Match<T>(T entry, Set<Relaxation> relaxations) {
+public record Match<T>(T entry, Set<Relaxation> relaxations, Optional<HistoryCheck> history) {
 
     /**
      * Creates a match.
      *
      * @param entry       the matched entry
      * @param relaxations the relaxations needed
+     * @param history     the history check, if any
      */
     public Match {
         Objects.requireNonNull(entry, "entry");
+        Objects.requireNonNull(history, "history");
         EnumSet<Relaxation> copy = EnumSet.noneOf(Relaxation.class);
         copy.addAll(Objects.requireNonNull(relaxations, "relaxations"));
         relaxations = Collections.unmodifiableSet(copy);

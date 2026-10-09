@@ -1,0 +1,17 @@
+package __PACKAGE__;
+
+/** What a code could have meant on the date a value was written (output specification §6.7). */
+public enum HistoryState {
+    /** The code meant the matched entry. */
+    SAME,
+    /** The code meant a different entry, valid at the time. */
+    OTHER,
+    /** The code meant nothing: its previous holder had been withdrawn. */
+    WITHDRAWN,
+    /** The code meant nothing: it had never been assigned. */
+    UNASSIGNED,
+    /** The date is before the library's recorded history for this code. Always reported alone. */
+    UNRECORDED,
+    /** The date is before ISO first published this kind of code. Always reported alone. */
+    PREDATES_STANDARD
+}

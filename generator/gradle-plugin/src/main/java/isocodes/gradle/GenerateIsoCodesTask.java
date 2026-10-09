@@ -4,6 +4,10 @@ import isocodes.emitter.java.EmitOptions;
 import isocodes.emitter.java.JavaEmitter;
 import isocodes.model.Contribution;
 import isocodes.model.IsoCodesDataset;
+import isocodes.model.SourceData;
+import isocodes.model.SourceInfo;
+import isocodes.source.history.Evidence;
+import isocodes.source.history.History;
 import isocodes.source.aggregate.Aggregator;
 import isocodes.source.aggregate.Overrides;
 import isocodes.source.aggregate.Report;
@@ -61,6 +65,12 @@ public abstract class GenerateIsoCodesTask extends DefaultTask {
     @org.gradle.api.tasks.Optional
     public abstract RegularFileProperty getOverridesFile();
 
+    /** History evidence written by {@code scripts/build_history.py}. Without it, there are no withdrawn entries. */
+    @InputFile
+    @PathSensitive(PathSensitivity.NONE)
+    @org.gradle.api.tasks.Optional
+    public abstract RegularFileProperty getHistoryFile();
+
     /** Where downloaded source files are kept between builds. */
     @Internal
     public abstract DirectoryProperty getDownloadDirectory();
@@ -91,13 +101,22 @@ public abstract class GenerateIsoCodesTask extends DefaultTask {
                 : Overrides.NONE;
 
         Aggregator.Result result = Aggregator.aggregate(cldr, isoCodes, overrides);
+        String reportText = Report.markdown(result, overrides);
+        SourceData data = result.data();
+        if (getHistoryFile().isPresent() && !result.hasErrors()) {
+            Evidence evidence = Evidence.parse(Files.readString(getHistoryFile().get().getAsFile().toPath()));
+            History.Result withHistory = History.of(evidence, data)
+                    .apply(data, new SourceInfo("iso3166-updates", evidence.changeLogCommit().substring(0, 7), "MIT"));
+            data = withHistory.data();
+            reportText += withHistory.markdown();
+        }
         Files.createDirectories(report.getParent());
-        Files.writeString(report, Report.markdown(result, overrides));
+        Files.writeString(report, reportText);
         if (result.hasErrors()) {
             throw new GradleException("Aggregation needs overrides before it can generate; see " + report.toUri());
         }
 
-        IsoCodesDataset dataset = IsoCodesDataset.fromSource(result.data());
+        IsoCodesDataset dataset = IsoCodesDataset.fromSource(data);
         deleteRecursively(output);
         JavaEmitter.write(dataset,
                 new EmitOptions(getBasePackage().get(), getDatasetVersion().get(),

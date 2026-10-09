@@ -18,7 +18,7 @@ public final class UnknownCodeException extends CodeRejectedException {
                 standard, field, input, strictness);
     }
 
-    private static String quote(String input) {
+    static String quote(String input) {
         StringBuilder out = new StringBuilder("\"");
         input.codePoints().forEach(cp -> {
             switch (cp) {
