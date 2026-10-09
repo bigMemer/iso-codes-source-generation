@@ -62,10 +62,12 @@ public sealed interface Country permits Country.V1, Country.V2 {
                     FieldDef.optional("official_name", "Official name of the item", null, V2::officialName),
                     FieldDef.optional("common_name", "Common name of the item", null, V2::commonName)),
             "alpha_2",
-            List.of("alpha_2", "alpha_3", "numeric"));
+            List.of("alpha_2", "alpha_3", "numeric"),
+            f -> new V2(f.required("alpha_2"), f.required("alpha_3"), f.required("flag"), f.required("name"),
+                    f.required("numeric"), f.optional("official_name"), f.optional("common_name")));
 
     /** A flag emoji is the alpha-2 code spelled in Unicode regional indicator symbols. */
-    private static String flagOf(String alpha2) {
+    static String flagOf(String alpha2) { // public: interface members can't be package-private
         StringBuilder flag = new StringBuilder();
         alpha2.chars().forEach(c -> flag.appendCodePoint(0x1F1E6 + c - 'A'));
         return flag.toString();

@@ -7,14 +7,10 @@ import java.util.function.Function;
 /**
  * A complete, validated dataset with every standard in its newest schema version. This is all an emitter sees.
  *
- * @param sourceName    human-readable name of the source, e.g. {@code Debian iso-codes}
- * @param sourceVersion version of the source data, e.g. the iso-codes release {@code 4.20.1}
- * @param sourceLicense SPDX licence identifier of the source data, which generated code inherits
+ * @param sources every source the data came from; generated code inherits all their licences
  */
 public record IsoCodesDataset(
-        String sourceName,
-        String sourceVersion,
-        String sourceLicense,
+        List<SourceInfo> sources,
         Table<Country.V2> countries,
         Table<Subdivision.V1> subdivisions) {
 
@@ -25,9 +21,7 @@ public record IsoCodesDataset(
      */
     public static IsoCodesDataset fromSource(SourceData source) {
         IsoCodesDataset dataset = new IsoCodesDataset(
-                source.sourceName(),
-                source.sourceVersion(),
-                source.sourceLicense(),
+                source.sources(),
                 upcast(Country.DEFINITION, source.countries(), Country::toLatest),
                 upcast(Subdivision.DEFINITION, source.subdivisions(), Subdivision::toLatest));
         List<String> problems = new ArrayList<>();
@@ -35,13 +29,22 @@ public record IsoCodesDataset(
             Validator.check(table, problems);
         }
         if (!problems.isEmpty()) {
-            throw new InvalidDatasetException(source.sourceName() + " " + source.sourceVersion(), problems);
+            throw new InvalidDatasetException(source.sources().toString(), problems);
         }
         return dataset;
     }
 
     private static <A, L> Table<L> upcast(StandardDef<L> standard, List<? extends A> rows, Function<A, L> toLatest) {
         return new Table<>(standard, rows.stream().map(toLatest).toList());
+    }
+
+    public IsoCodesDataset {
+        sources = List.copyOf(sources);
+    }
+
+    /** Distinct SPDX licence identifiers of all sources, in source order. */
+    public List<String> sourceLicenses() {
+        return sources.stream().map(SourceInfo::license).distinct().toList();
     }
 
     /** Every standard, in a fixed order. */

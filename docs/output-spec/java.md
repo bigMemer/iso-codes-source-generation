@@ -28,10 +28,10 @@ doesn't repeat behaviour the spec already defines.
 | `name` field | `englishName()` |
 | Operation `from_f` / `parse_f` / `is_valid_f` | `fromAlpha2`, `parseAlpha2`, `isValidAlpha2` |
 | Member names | exactly the spec's rule: `Country.DE` |
-| Dataset constants | `IsoCodes.SOURCE_NAME`, `IsoCodes.VERSION`, `IsoCodes.SOURCE_LICENSE` |
+| Dataset constants | `IsoCodes.VERSION`, `IsoCodes.SOURCES` (`List<String>`), `IsoCodes.LICENSE` |
 | Error type | `UnknownCodeException` |
 
-`IsoCodes.VERSION` keeps its existing name instead of `SOURCE_VERSION`, because it's already published API.
+`IsoCodes.VERSION` now holds the dataset version rather than the iso-codes version.
 
 ## 3. Enumerations
 
@@ -225,7 +225,6 @@ What the current emitter output (`intermediate-model` branch) is missing, agains
 | `from<Field>(null)` returns `Optional.empty()` instead of throwing `NullPointerException`. | §7.2 |
 | `enum` types have no `all()`. | §5.3 |
 | `Country.toString()` isn't explicitly overridden. It's correct today only because constant names equal `alpha_2` codes. | §5.4 |
-| `IsoCodes` lacks `SOURCE_NAME` and `SOURCE_LICENSE`. | §5.5 |
 | No `Automatic-Module-Name` in the JAR manifest. | §1 here |
 | No withdrawn entries, lifecycle date accessors, `allIncludingWithdrawn()`, `WITHDRAWN`, history checks or `MeaningChangedException`. Needs the aggregated sources first. | §4.1, §5.1, §6.7, §7.1a |
 

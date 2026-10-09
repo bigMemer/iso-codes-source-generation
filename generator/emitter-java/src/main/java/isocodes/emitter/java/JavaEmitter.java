@@ -37,18 +37,23 @@ public final class JavaEmitter {
     private static final ClassName MAP = ClassName.get(Map.class);
 
     private final String basePackage;
+    private final EmitOptions options;
     private final String source;
     private final String license;
 
-    private JavaEmitter(String basePackage, IsoCodesDataset dataset) {
-        this.basePackage = basePackage;
-        this.source = dataset.sourceName() + " " + dataset.sourceVersion();
-        this.license = dataset.sourceLicense();
+    private JavaEmitter(EmitOptions options, IsoCodesDataset dataset) {
+        this.basePackage = options.basePackage();
+        this.options = options;
+        this.source = dataset.sources().stream().map(Object::toString).collect(java.util.stream.Collectors.joining(", "));
+        List<String> licenses = new ArrayList<>();
+        options.ownLicense().ifPresent(own -> licenses.add(own.contains(" ") ? "(" + own + ")" : own));
+        licenses.addAll(dataset.sourceLicenses());
+        this.license = String.join(" AND ", licenses);
     }
 
-    /** Emits every standard in the dataset, plus a class recording the source version. */
-    public static List<JavaFile> emit(IsoCodesDataset dataset, String basePackage) {
-        JavaEmitter emitter = new JavaEmitter(basePackage, dataset);
+    /** Emits every standard in the dataset, plus a class recording the dataset version and its sources. */
+    public static List<JavaFile> emit(IsoCodesDataset dataset, EmitOptions options) {
+        JavaEmitter emitter = new JavaEmitter(options, dataset);
         List<JavaFile> files = new ArrayList<>();
         for (Table<?> table : dataset.tables()) {
             files.addAll(emitter.emitTable(table));
@@ -58,8 +63,8 @@ public final class JavaEmitter {
     }
 
     /** Emits the dataset into a source directory. */
-    public static void write(IsoCodesDataset dataset, String basePackage, Path outputDir) {
-        for (JavaFile file : emit(dataset, basePackage)) {
+    public static void write(IsoCodesDataset dataset, EmitOptions options, Path outputDir) {
+        for (JavaFile file : emit(dataset, options)) {
             try {
                 file.writeTo(outputDir);
             } catch (IOException e) {
@@ -253,10 +258,20 @@ public final class JavaEmitter {
     private JavaFile versionClass(IsoCodesDataset dataset) {
         return javaFile(basePackage, TypeSpec.classBuilder("IsoCodes")
                 .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                .addJavadoc("Information about the $L release these classes were generated from.\n", dataset.sourceName())
+                .addJavadoc("Information about the dataset these classes were generated from.\n")
                 .addField(FieldSpec.builder(STRING, "VERSION", Modifier.PUBLIC, Modifier.STATIC, Modifier.FINAL)
-                        .addJavadoc("The upstream iso-codes version, e.g. {@code 4.20.1}.\n")
-                        .initializer("$S", dataset.sourceVersion())
+                        .addJavadoc("The dataset version, e.g. {@code 2026.10.0}.\n")
+                        .initializer("$S", options.datasetVersion())
+                        .build())
+                .addField(FieldSpec.builder(ParameterizedTypeName.get(LIST, STRING), "SOURCES",
+                                Modifier.PUBLIC, Modifier.STATIC, Modifier.FINAL)
+                        .addJavadoc("The upstream sources and their versions, e.g. {@code Unicode CLDR 48.2}.\n")
+                        .initializer("$T.of($L)", LIST, CodeBlock.join(dataset.sources().stream()
+                                .map(s -> CodeBlock.of("$S", s.toString())).toList(), ", "))
+                        .build())
+                .addField(FieldSpec.builder(STRING, "LICENSE", Modifier.PUBLIC, Modifier.STATIC, Modifier.FINAL)
+                        .addJavadoc("SPDX licence expression covering the generated code and its data.\n")
+                        .initializer("$S", license)
                         .build())
                 .addMethod(MethodSpec.constructorBuilder().addModifiers(Modifier.PRIVATE).build())
                 .build());

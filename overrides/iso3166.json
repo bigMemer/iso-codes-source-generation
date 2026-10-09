@@ -1,0 +1,53 @@
+{
+  "3166-1": [
+    {
+      "code": "AC",
+      "action": "exclude",
+      "reason": "Exceptionally reserved by ISO 3166/MA for Ascension Island, not assigned as a country. CLDR lists it as a region.",
+      "evidence": "https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Exceptional_reservations"
+    },
+    {
+      "code": "CP",
+      "action": "exclude",
+      "reason": "Exceptionally reserved by ISO 3166/MA for Clipperton Island, not assigned as a country. CLDR lists it as a region.",
+      "evidence": "https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Exceptional_reservations"
+    },
+    {
+      "code": "CQ",
+      "action": "exclude",
+      "reason": "Exceptionally reserved by ISO 3166/MA for Island of Sark, not assigned as a country. CLDR lists it as a region.",
+      "evidence": "https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Exceptional_reservations"
+    },
+    {
+      "code": "DG",
+      "action": "exclude",
+      "reason": "Exceptionally reserved by ISO 3166/MA for Diego Garcia, not assigned as a country. CLDR lists it as a region.",
+      "evidence": "https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Exceptional_reservations"
+    },
+    {
+      "code": "EA",
+      "action": "exclude",
+      "reason": "Exceptionally reserved by ISO 3166/MA for Ceuta, Melilla, not assigned as a country. CLDR lists it as a region.",
+      "evidence": "https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Exceptional_reservations"
+    },
+    {
+      "code": "IC",
+      "action": "exclude",
+      "reason": "Exceptionally reserved by ISO 3166/MA for Canary Islands, not assigned as a country. CLDR lists it as a region.",
+      "evidence": "https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Exceptional_reservations"
+    },
+    {
+      "code": "TA",
+      "action": "exclude",
+      "reason": "Exceptionally reserved by ISO 3166/MA for Tristan da Cunha, not assigned as a country. CLDR lists it as a region.",
+      "evidence": "https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#Exceptional_reservations"
+    },
+    {
+      "code": "XK",
+      "action": "exclude",
+      "reason": "User-assigned code used for Kosovo by the European Commission, SWIFT, CLDR and others; not part of ISO 3166-1.",
+      "evidence": "https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2#User-assigned_code_elements"
+    }
+  ],
+  "3166-2": []
+}

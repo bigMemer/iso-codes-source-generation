@@ -4,6 +4,8 @@ plugins {
 
 dependencies {
     implementation(project(":source-isocodes"))
+    implementation(project(":source-cldr"))
+    implementation(project(":source-aggregate"))
     implementation(project(":emitter-java"))
 }
 

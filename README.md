@@ -1,7 +1,8 @@
 # iso-codes-source-generation
 
-Generates Java sources for ISO 3166-1 (countries) and ISO 3166-2 (country subdivisions) from
-[Debian's iso-codes](https://salsa.debian.org/iso-codes-team/iso-codes) JSON data.
+Generates Java sources for ISO 3166-1 (countries) and ISO 3166-2 (country subdivisions), combining
+[Unicode CLDR](https://github.com/unicode-org/cldr) and [Debian's iso-codes](https://salsa.debian.org/iso-codes-team/iso-codes)
+with reviewed overrides.
 
 This repo holds only the generator. The generated library lives in
 [bigMemer/iso-codes-java](https://github.com/bigMemer/iso-codes-java), which is what consumers depend on and what
@@ -15,16 +16,22 @@ What every generated library must look like and how it behaves, in any language,
 
 ## Data sources
 
-The generator is moving from iso-codes alone to an aggregate of Unicode CLDR, iso-codes, Wikidata and reviewed
-overrides. The design is in [docs/sources.md](docs/sources.md); until it's implemented, iso-codes is the only source.
+CLDR is the *backbone* (proposes which codes exist; usually first to change), iso-codes the *authority* (trusted to
+be right, sometimes stale), and `overrides/iso3166.json` holds reviewed corrections, each with a reason and evidence.
+The design is in [docs/sources.md](docs/sources.md). Implemented so far: CLDR, iso-codes, overrides and the
+aggregation rules. Not yet: Wikidata as a gap filler, and history (withdrawn entries, `written_at`).
+
+Source versions and the dataset version are set in `gradle.properties` (`cldrVersion`, `isoCodesVersion`,
+`datasetVersion`). Every build writes `build/reports/iso-codes/aggregation.md`, listing everything aggregation
+decided that a reviewer should see. If a code can't be built from the sources (e.g. a required field nobody
+supplies), the build fails and the report says which override to add.
 
 ## How it works
 
 ```
- source-isocodes            model                       emitter-java
- iso-codes JSON  ──────►  versioned records  ──────►  Java sources
-                 parse     ──upcast──► latest  emit
-                           + validate
+ source-cldr ───────┐
+ source-isocodes ───┼─► source-aggregate ──► model ──────────────► emitter-java
+ overrides file ────┘   (rules, report)      upcast + validate      Java sources
 ```
 
 The generator is a separate Gradle build in `generator/`, split into modules so the boundaries are enforced by
@@ -34,8 +41,10 @@ the compiler:
 |-------------------|-----------------------------------------------------|------------|
 | `model`           | Our intermediate representation, nothing else       | nothing    |
 | `source-isocodes` | iso-codes file names, JSON keys, salsa.debian.org   | `model`    |
+| `source-cldr`     | CLDR's XML layout, id format and deprecation reasons| `model`    |
+| `source-aggregate`| Combining sources by role (backbone, authority), overrides | `model` |
 | `emitter-java`    | Java naming, enums vs classes, JavaPoet             | `model`    |
-| `gradle-plugin`   | Wiring one source to one emitter in a Gradle build  | all three  |
+| `gradle-plugin`   | Wiring sources, aggregation and an emitter in a Gradle build | all of them |
 
 **Model.** Each standard is a sealed interface whose nested records are numbered schema versions, e.g.
 `Country.V1` (no flag) and `Country.V2` (with flag). Every version can `toLatest()`, deriving what's missing
@@ -51,22 +60,22 @@ a field, **fails the build** with a message saying what didn't match.
 - *Same information, new layout:* add a shape in `source-isocodes` that parses into the existing model version.
 - *New information:* add a model version (`V3`) with an upcaster from `V2`, point the `DEFINITION` at it, and add
   the matching shape. The emitter picks up the new field from the definition.
-- *A different source of truth:* write a new `source-*` module that produces `SourceData`. Nothing else changes.
+- *Another source:* write a `source-*` module that produces a `Contribution`, and give it a role in aggregation.
+  The model and emitters don't change.
 
 ```sh
-./gradlew build                                   # generator unit tests + generate/compile/test 4.20.1
-./gradlew build exportOutput -PisoCodesVersion=4.7.0
+./gradlew build                     # generator unit tests + aggregate, generate, compile and test
+./gradlew build exportOutput        # also assemble the files the output repo tracks
 ```
 
 `exportOutput` writes exactly the files the output repo tracks to `build/output/`:
 
 ```
 build/output/
-├── iso-codes.version          # the upstream release, e.g. 4.20.1
+├── dataset.version            # the dataset version, e.g. 2026.10.0
 └── src/main/java/...          # generated sources
 ```
 
-`scripts/upstream_versions.py` lists the supported upstream releases (3.67 onward; `--latest` for the newest).
 
 ## Generated API
 
@@ -82,11 +91,11 @@ optional ones return `Optional<String>`. The JSON `name` field is exposed as
 
 ## CI
 
-- **CI** (`ci.yml`): on every push, builds and tests three representative releases and uploads each one's
-  `build/output/` as a workflow artifact.
-- **Propose output update** (`propose-update.yml`): run manually with an iso-codes version (blank means newest).
-  It generates and tests the sources, uploads them as an artifact, then opens or updates a pull request on
-  `bigMemer/iso-codes-java` from branch `iso-codes/<version>`.
+- **CI** (`ci.yml`): on every push, builds and tests with the configured source versions, and uploads the
+  generated files and the aggregation report as workflow artifacts.
+- **Propose output update** (`propose-update.yml`): run manually with a dataset version. It generates and tests
+  the sources, uploads them with the report, then opens or updates a pull request on `bigMemer/iso-codes-java` from
+  branch `dataset/<version>`, with the aggregation report as the pull request's description.
 
   **Not wired up yet:** the PR step needs a credential for the output repo, and which mechanism to use
   (fine-grained PAT or GitHub App) hasn't been decided. Until then the `open-pr` job fails at a clearly marked
@@ -94,5 +103,8 @@ optional ones return `Optional<String>`. The JSON `name` field is exposed as
 
 ## Licence
 
-The generated code derives from iso-codes data, licensed under the [GNU LGPL 2.1 or later](LICENSE). This
-generator uses the same licence.
+Generated code is licensed `(Apache-2.0 OR MIT) AND Unicode-3.0 AND LGPL-2.1-or-later`: our own contribution
+(generated structure and overrides) under Apache-2.0 or MIT at the consumer's choice, plus the licences of the CLDR
+and iso-codes data it contains. See [docs/sources.md](docs/sources.md) §8.
+
+This generator itself is licensed under the [GNU LGPL 2.1 or later](LICENSE).

@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import isocodes.model.Country;
 import isocodes.model.IsoCodesDataset;
 import isocodes.model.SourceData;
+import isocodes.model.SourceInfo;
 import isocodes.model.Subdivision;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -21,13 +22,15 @@ import org.junit.jupiter.api.io.TempDir;
 
 class JavaEmitterTest {
 
+    private static final EmitOptions OPTIONS = new EmitOptions("test.out", "1.2.3", Optional.of("Apache-2.0 OR MIT"));
+
     private static IsoCodesDataset dataset() {
         List<Subdivision.V1> subdivisions = new ArrayList<>();
         // Enough rows to need more than one data holder class.
         IntStream.range(0, 600).forEach(i -> subdivisions.add(new Subdivision.V1(
                 "DE-" + Integer.toString(i, 36).toUpperCase(java.util.Locale.ROOT),
                 "Subdivision " + i, Optional.empty(), "State")));
-        return IsoCodesDataset.fromSource(new SourceData("Test data", "9.9", "CC0-1.0",
+        return IsoCodesDataset.fromSource(new SourceData(List.of(new SourceInfo("Test data", "9.9", "CC0-1.0")),
                 List.of(new Country.V2("DE", "DEU", "🇩🇪", "Germany", "276", Optional.empty(), Optional.empty())),
                 subdivisions));
     }
@@ -35,7 +38,7 @@ class JavaEmitterTest {
     @Test
     void emittedSourcesCompile(@TempDir Path dir) throws IOException {
         Path src = dir.resolve("src");
-        JavaEmitter.write(dataset(), "test.out", src);
+        JavaEmitter.write(dataset(), OPTIONS, src);
 
         List<String> files;
         try (Stream<Path> paths = Files.walk(src)) {
@@ -48,9 +51,9 @@ class JavaEmitterTest {
 
     @Test
     void emitsSourceMetadataAndLookups(@TempDir Path dir) throws IOException {
-        JavaEmitter.write(dataset(), "test.out", dir);
+        JavaEmitter.write(dataset(), OPTIONS, dir);
         String country = Files.readString(dir.resolve("test/out/iso3166/Country.java"));
-        assertTrue(country.startsWith("// SPDX-License-Identifier: CC0-1.0\n// Generated from Test data 9.9."), country);
+        assertTrue(country.startsWith("// SPDX-License-Identifier: (Apache-2.0 OR MIT) AND CC0-1.0\n// Generated from Test data 9.9."), country);
         assertTrue(country.contains("DE(\"DE\", \"DEU\", \"🇩🇪\", \"Germany\", \"276\", null, null)"), country);
         assertTrue(country.contains("public static Optional<Country> fromAlpha3(String alpha3)"), country);
         assertTrue(Files.exists(dir.resolve("test/out/iso3166/SubdivisionData1.java")));

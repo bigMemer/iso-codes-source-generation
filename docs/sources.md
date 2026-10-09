@@ -1,6 +1,7 @@
 # Data sources and aggregation
 
-**Status:** design, not yet implemented. **Scope:** ISO 3166-1 and ISO 3166-2.
+**Status:** §1–§4, §7 and §8 implemented (CLDR, iso-codes, overrides); Wikidata and history (§5, §9) not yet.
+**Scope:** ISO 3166-1 and ISO 3166-2.
 
 How the generator combines several imperfect sources into one dataset, and how changes reach the generated
 libraries. The model, emitters and [output spec](output-spec/README.md) stay source-agnostic. Everything here
@@ -58,13 +59,18 @@ CLDR records 626 deprecated subdivision codes: 599 with reason `deprecated` (wit
 `overlong` (its modelling choice). All 19 ISO codes missing from CLDR are `overlong`, so no hand-maintained list is
 needed for them.
 
-ISO 3166-1 uses the same rules: CLDR's territory codes (excluding reserved and user-assigned ones such as `AA` and
-`XK`) as backbone, iso-codes as authority.
+ISO 3166-1 uses the same rules, with CLDR's regular region codes as backbone and iso-codes as authority. CLDR's
+regular regions include codes ISO never assigned as countries: the exceptionally reserved `AC`, `CP`, `CQ`, `DG`,
+`EA`, `IC`, `TA` and the user-assigned `XK`. These are excluded by overrides. Without them, the first seven fail the
+build for lack of ISO numeric codes, but `XK`, which CLDR gives a numeric and alpha-3 code, would quietly become a
+country, which is why exclusions are reviewed overrides rather than left to validation.
 
 ## 4. Which value each field gets
 
-Highest precedence first. A value only falls through to the next source when the higher one has no value for that
-code.
+Highest precedence first. **When the authority (iso-codes) has an entry, its silence is a statement:** a missing
+optional field means ISO has none, so no lower source fills it. Lower sources only supply values for codes the
+authority doesn't have at all. The exception is the code fields, where the backbone goes first and
+disagreements are flagged.
 
 | Field | Precedence | Notes |
 |-------|------------|-------|
@@ -72,7 +78,7 @@ code.
 | `name` | overrides, iso-codes, CLDR, Wikidata | iso-codes has ISO's spelling. For codes iso-codes doesn't have yet, CLDR's English name is used (decided), so `name` stays required. It may read differently ("Brussels" against ISO's "Bruxelles-Capitale, Région de"), so a fallback name is always flagged. |
 | `official_name`, `common_name` (3166-1) | overrides, iso-codes, Wikidata | CLDR has no equivalent. Wikidata's "official name" (`P1448`, English value) is accepted for `official_name` (decided); its values are always flagged. |
 | `type` (3166-2) | overrides, iso-codes, Wikidata | CLDR has none. Wikidata's types are its own categories ("province of Spain"), so a Wikidata value is always flagged. |
-| `parent` (3166-2) | overrides, iso-codes, CLDR | CLDR has containment lists. |
+| `parent` (3166-2) | overrides, iso-codes, CLDR | CLDR has containment lists, used only for codes iso-codes doesn't have. |
 | `flag` (3166-1) | derived from `alpha_2` | Not taken from any source. |
 
 **Mixed sources.** A code that's still unconfirmed may get its name from CLDR and its type from Wikidata. That's

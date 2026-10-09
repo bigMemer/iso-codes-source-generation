@@ -14,13 +14,19 @@ public class IsoCodesPlugin implements Plugin<Project> {
         IsoCodesExtension extension = project.getExtensions().create("isoCodes", IsoCodesExtension.class);
 
         var generate = project.getTasks().register("generateIsoCodes", GenerateIsoCodesTask.class, task -> {
-            task.setDescription("Generates Java sources from Debian iso-codes.");
+            task.setDescription("Aggregates CLDR, iso-codes and overrides, and generates Java sources.");
             task.getIsoCodesVersion().set(extension.getVersion());
+            task.getCldrVersion().set(extension.getCldrVersion());
+            task.getDatasetVersion().set(extension.getDatasetVersion());
             task.getBasePackage().set(extension.getBasePackage());
-            task.getDownloadDirectory().set(project.getLayout().getBuildDirectory().dir("iso-codes-json"));
+            task.getOwnLicense().set(extension.getOwnLicense());
+            task.getOverridesFile().set(extension.getOverridesFile());
+            task.getReportFile().set(project.getLayout().getBuildDirectory().file("reports/iso-codes/aggregation.md"));
+            task.getDownloadDirectory().set(project.getLayout().getBuildDirectory().dir("downloads"));
             task.getOutputDirectory().set(project.getLayout().getBuildDirectory().dir("generated/sources/iso-codes"));
         });
 
-        project.getExtensions().getByType(SourceSetContainer.class).getByName("main").getJava().srcDir(generate);
+        project.getExtensions().getByType(SourceSetContainer.class).getByName("main").getJava()
+                .srcDir(generate.flatMap(GenerateIsoCodesTask::getOutputDirectory));
     }
 }

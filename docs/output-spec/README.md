@@ -241,9 +241,9 @@ Each library MUST expose, as constants in its root namespace:
 
 | Concept name     | Example |
 |------------------|---------|
-| `source_name`    | `Debian iso-codes` |
-| `source_version` | `4.20.1` |
-| `source_license` | `LGPL-2.1-or-later` |
+| `version`        | `2026.10.0`, the dataset version |
+| `sources`        | `["Unicode CLDR 48.2", "Debian iso-codes 4.20.1"]` |
+| `license`        | `(Apache-2.0 OR MIT) AND Unicode-3.0 AND LGPL-2.1-or-later` |
 | `field_introduced`, per code field | when ISO first published that kind of code, as a date range ([§6.7](#67-checking-against-when-a-value-was-written)): ISO 3166-1 `alpha_2` and `alpha_3` in 1974, `numeric` in 1981; ISO 3166-2 `code` in 1998-12 |
 
 ## 6. Ambiguities, canonical form and strictness
@@ -608,8 +608,7 @@ The generator side of this spec:
   enforced by validation.
 - [ ] Check that every ISO 3166-2 code's prefix is an ISO 3166-1 `alpha_2` ([§6.1](#61-canonical-form)). True of all
   current data, but validation only checks the format.
-- [ ] Expose `source_license` and `source_name` from the model to emitters as dataset constants (the model has
-  them; emitters don't output them yet).
+- [x] Dataset constants: version, sources and licence ([§5.5](#55-dataset-information)).
 
 Each binding document lists its own conformance gaps.
 

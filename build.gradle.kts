@@ -1,3 +1,5 @@
+import isocodes.gradle.GenerateIsoCodesTask
+
 plugins {
     java
     id("isocodes.generator")
@@ -15,7 +17,11 @@ java {
 
 isoCodes {
     version = upstreamVersion
+    cldrVersion = providers.gradleProperty("cldrVersion")
+    datasetVersion = providers.gradleProperty("datasetVersion")
     basePackage = providers.gradleProperty("basePackage")
+    ownLicense = "Apache-2.0 OR MIT"
+    overridesFile = layout.projectDirectory.file("overrides/iso3166.json")
 }
 
 // The plugin adds the generated sources to the main source set. They're compiled and tested here so a broken
@@ -44,25 +50,25 @@ tasks.test {
 
 // The generator's own unit tests live in the included build; run them as part of this build's check.
 tasks.check {
-    dependsOn(listOf("model", "source-isocodes", "emitter-java", "gradle-plugin").map {
+    dependsOn(listOf("model", "source-isocodes", "source-cldr", "source-aggregate", "emitter-java", "gradle-plugin").map {
         gradle.includedBuild("generator").task(":$it:check")
     })
 }
 
 val writeVersionFile = tasks.register("writeVersionFile") {
-    val versionFile = layout.buildDirectory.file("iso-codes-version/iso-codes.version")
-    val version = upstreamVersion // local copy so the action doesn't capture the build script
-    inputs.property("isoCodesVersion", version)
+    val versionFile = layout.buildDirectory.file("dataset-version/dataset.version")
+    val version = providers.gradleProperty("datasetVersion").get() // local copy so the action doesn't capture the script
+    inputs.property("datasetVersion", version)
     outputs.file(versionFile)
     doLast {
         versionFile.get().asFile.writeText("$version\n")
     }
 }
 
-// The exact files the iso-codes-java output repo tracks: generated sources plus the upstream version they came from.
+// The exact files the output repo tracks: generated sources plus the dataset version.
 tasks.register<Sync>("exportOutput") {
     description = "Assembles the generated files for the iso-codes-java output repo in build/output."
-    from(tasks.named("generateIsoCodes")) { into("src/main/java") }
+    from(tasks.named<GenerateIsoCodesTask>("generateIsoCodes").flatMap { it.outputDirectory }) { into("src/main/java") }
     from(writeVersionFile)
     into(layout.buildDirectory.dir("output"))
 }

@@ -31,5 +31,6 @@ public sealed interface Subdivision permits Subdivision.V1 {
                     FieldDef.optional("parent", "Parent of the country subset item", null, V1::parent),
                     FieldDef.required("type", "Type of subset of the country", null, V1::type)),
             "code",
-            List.of("code"));
+            List.of("code"),
+            f -> new V1(f.required("code"), f.required("name"), f.optional("parent"), f.required("type")));
 }

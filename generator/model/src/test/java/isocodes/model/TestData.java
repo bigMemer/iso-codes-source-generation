@@ -7,6 +7,6 @@ final class TestData {
     private TestData() {}
 
     static SourceData countries(List<? extends Country> countries) {
-        return new SourceData("Test", "1.0", "CC0-1.0", countries, List.of());
+        return new SourceData(List.of(new SourceInfo("Test", "1.0", "CC0-1.0")), countries, List.of());
     }
 }
