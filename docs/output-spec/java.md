@@ -215,17 +215,15 @@ public final class MeaningChangedException extends CodeRejectedException {
 
 ## 9. Conformance gaps
 
-What the current emitter output (`intermediate-model` branch) is missing, against this document and the spec:
+What the current emitter output is missing, against this document and the spec. Conformance is checked by
+`src/test/java/isocodes/SpecConformanceTest.java`, which runs every example in spec §6.5.
 
 | Gap | Spec |
 |-----|------|
-| No `Relaxation`, `Strictness`, `Match` or `Validation`; lookups are exact only. | §5.3, §6 |
-| No `parse<Field>`, `isValid<Field>` or `…Detailed` operations. | §5.3 |
-| No `UnknownCodeException`. | §7.1 |
-| `from<Field>(null)` returns `Optional.empty()` instead of throwing `NullPointerException`. | §7.2 |
-| `enum` types have no `all()`. | §5.3 |
-| `Country.toString()` isn't explicitly overridden. It's correct today only because constant names equal `alpha_2` codes. | §5.4 |
-| No `Automatic-Module-Name` in the JAR manifest. | §1 here |
-| No withdrawn entries, lifecycle date accessors, `allIncludingWithdrawn()`, `WITHDRAWN`, history checks or `MeaningChangedException`. Needs the aggregated sources first. | §4.1, §5.1, §6.7, §7.1a |
+| No withdrawn entries, lifecycle accessors (`isWithdrawn()`, date ranges, `recordedSince()`), `allIncludingWithdrawn()`, or `@Deprecated` constants. `Relaxation.WITHDRAWN` exists but never matches anything yet. Needs the history work in docs/sources.md §9. | §4.1, §5.1 |
+| No `written_at` history checks: no `HistoryState`, `HistoryPolicy`, `HistoryCheck`, `MeaningChangedException`, `writtenAt` overloads, or `history` component on `Match`. Same dependency. | §6.7, §7.1a |
+| No `Automatic-Module-Name` in the JAR manifest. That's set in the output repo's build, which hasn't been updated yet. | §1 here |
 
-Already conforming: field accessors return canonical forms, and `Subdivision.toString()` returns the primary code.
+Conforming: strictness and relaxations (format relaxations, `STRICT`/`LENIENT`), `from`/`parse`/`isValid` with
+their detailed forms, `UnknownCodeException` (via `CodeRejectedException`), null rejection, `all()` on every type,
+`toString()` as the canonical code, field accessors, and `IsoCodes.VERSION`/`SOURCES`/`LICENSE`.

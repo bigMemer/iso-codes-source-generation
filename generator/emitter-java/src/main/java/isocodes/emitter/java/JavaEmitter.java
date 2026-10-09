@@ -62,7 +62,7 @@ public final class JavaEmitter {
         return files;
     }
 
-    /** Emits the dataset into a source directory. */
+    /** Emits the dataset, plus the fixed runtime classes it uses, into a source directory. */
     public static void write(IsoCodesDataset dataset, EmitOptions options, Path outputDir) {
         for (JavaFile file : emit(dataset, options)) {
             try {
@@ -71,6 +71,7 @@ public final class JavaEmitter {
                 throw new UncheckedIOException(e);
             }
         }
+        Runtime.write(options, outputDir);
     }
 
     /** A model field as it appears on the generated type. */
@@ -113,12 +114,12 @@ public final class JavaEmitter {
         List<JavaFile> files = new ArrayList<>();
         if (target.kind() == JavaTarget.Kind.ENUM) {
             addEnumConstants(builder, table, fields);
-            addLookups(builder, type, lookups, CodeBlock.of("values()"));
+            addEnumAll(builder, type, javaName(standard.primaryKey()));
         } else {
             files.addAll(addTableData(builder, type, table.rows(), fields));
-            addLookups(builder, type, lookups, CodeBlock.of("ALL"));
             addTableObjectMethods(builder, type, javaName(standard.primaryKey()));
         }
+        addLookups(builder, type, standard.id(), lookups);
         files.add(0, javaFile(pkg, builder.build()));
         return files;
     }
@@ -208,22 +209,51 @@ public final class JavaEmitter {
                         .build());
     }
 
-    /** Lookup fields are unique by construction: the model rejects datasets where they aren't. */
-    private static <T> void addLookups(TypeSpec.Builder builder, ClassName type, List<Field<T>> lookups, CodeBlock source) {
-        TypeName mapType = ParameterizedTypeName.get(MAP, STRING, type);
+    /** Enums get the same {@code all()} as table classes, and {@code toString()} returns the canonical code. */
+    private static void addEnumAll(TypeSpec.Builder builder, ClassName type, String key) {
+        TypeName listType = ParameterizedTypeName.get(LIST, type);
+        builder.addField(FieldSpec.builder(listType, "ALL", Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
+                        .initializer("$T.of(values())", LIST)
+                        .build())
+                .addMethod(MethodSpec.methodBuilder("all")
+                        .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+                        .returns(listType)
+                        .addJavadoc("Returns every entry, in upstream order.\n\n@return an unmodifiable list of all entries\n")
+                        .addStatement("return ALL")
+                        .build())
+                .addMethod(MethodSpec.methodBuilder("toString")
+                        .addAnnotation(Override.class)
+                        .addModifiers(Modifier.PUBLIC)
+                        .returns(String.class)
+                        .addJavadoc("Returns the canonical code, which may differ from {@link #name()}.\n\n"
+                                + "@return the canonical $L\n", key)
+                        .addStatement("return $N", key)
+                        .build());
+    }
+
+    /**
+     * For each code field: {@code from}, {@code parse} and {@code isValid}, each plain and detailed, each with and
+     * without a {@code Strictness}. All share one {@code Lookup}, which implements the spec's matching algorithm.
+     */
+    private <T> void addLookups(TypeSpec.Builder builder, ClassName type, String standardId, List<Field<T>> lookups) {
+        ClassName lookup = ClassName.get(basePackage + ".internal", "Lookup");
+        ClassName strictness = ClassName.get(basePackage, "Strictness");
+        ClassName match = ClassName.get(basePackage, "Match");
+        ClassName validation = ClassName.get(basePackage, "Validation");
+        ClassName unknown = ClassName.get(basePackage, "UnknownCodeException");
+        TypeName matchOfT = ParameterizedTypeName.get(match, type);
+        TypeName optionalT = ParameterizedTypeName.get(OPTIONAL, type);
+        TypeName optionalMatch = ParameterizedTypeName.get(OPTIONAL, matchOfT);
+        TypeName validationOfT = ParameterizedTypeName.get(validation, type);
+
         CodeBlock.Builder init = CodeBlock.builder();
         for (Field<T> field : lookups) {
             String index = indexName(field);
-            builder.addField(FieldSpec.builder(mapType, index, Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL).build());
-            init.addStatement("$T<$T, $T> $N = new $T<>()", Map.class, STRING, type, index.toLowerCase(Locale.ROOT),
-                    HashMap.class);
-        }
-        if (lookups.isEmpty()) {
-            return;
-        }
-        init.beginControlFlow("for ($T entry : $L)", type, source);
-        for (Field<T> field : lookups) {
-            String local = indexName(field).toLowerCase(Locale.ROOT);
+            String local = index.toLowerCase(Locale.ROOT);
+            builder.addField(FieldSpec.builder(ParameterizedTypeName.get(lookup, type), index,
+                    Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL).build());
+            init.addStatement("$T<$T, $T> $N = new $T<>()", Map.class, STRING, type, local, HashMap.class);
+            init.beginControlFlow("for ($T entry : ALL)", type);
             if (field.required()) {
                 init.addStatement("$N.put(entry.$N, entry)", local, field.java());
             } else {
@@ -231,24 +261,84 @@ public final class JavaEmitter {
                         .addStatement("$N.put(entry.$N, entry)", local, field.java())
                         .endControlFlow();
             }
-        }
-        init.endControlFlow();
-        for (Field<T> field : lookups) {
-            String index = indexName(field);
-            init.addStatement("$N = $T.copyOf($N)", index, MAP, index.toLowerCase(Locale.ROOT));
+            init.endControlFlow();
+            init.addStatement("$N = new $T<>($S, $S, $L, $N)", index, lookup, standardId, field.def().id(),
+                    field.def().id().equals("numeric"), local);
 
-            String method = "from" + Character.toUpperCase(field.java().charAt(0)) + field.java().substring(1);
-            builder.addMethod(MethodSpec.methodBuilder(method)
-                    .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
-                    .returns(ParameterizedTypeName.get(OPTIONAL, type))
-                    .addParameter(STRING, field.java())
-                    .addJavadoc("Finds the entry whose {@code $L} is exactly the given value.\n\n"
-                            + "@param $N the value to look up (case-sensitive)\n"
-                            + "@return the matching entry, or empty if there is none\n", field.def().id(), field.java())
-                    .addStatement("return $T.ofNullable($N.get($N))", OPTIONAL, index, field.java())
-                    .build());
+            String suffix = Character.toUpperCase(field.java().charAt(0)) + field.java().substring(1);
+            String p = field.java();
+            String id = field.def().id();
+            String strictDoc = "@param $N the code to look up\n";
+            String withDoc = strictDoc + "@param strictness which relaxations to allow\n";
+            String nullDoc = "@throws NullPointerException if an argument is null\n";
+
+            // from
+            builder.addMethod(method("from" + suffix, optionalT, p, false)
+                    .addJavadoc("Finds the entry whose {@code $L} is exactly the given code ({@code Strictness.STRICT}).\n\n"
+                            + strictDoc + "@return the entry, or empty if none matches\n" + nullDoc, id, p)
+                    .addStatement("return from$L($N, $T.STRICT)", suffix, p, strictness).build());
+            builder.addMethod(method("from" + suffix, optionalT, p, true)
+                    .addJavadoc("Finds the entry whose {@code $L} matches the code under the given strictness.\n\n"
+                            + withDoc + "@return the entry, or empty if none matches\n" + nullDoc, id, p)
+                    .addStatement("return $N.match($N, strictness).map($T::entry)", index, p, match).build());
+            builder.addMethod(method("from" + suffix + "Detailed", optionalMatch, p, false)
+                    .addJavadoc("As {@link #from$L(String)}, also reporting the relaxations the match needed.\n\n"
+                            + strictDoc + "@return the match, or empty if none\n" + nullDoc, suffix, p)
+                    .addStatement("return from$LDetailed($N, $T.STRICT)", suffix, p, strictness).build());
+            builder.addMethod(method("from" + suffix + "Detailed", optionalMatch, p, true)
+                    .addJavadoc("As {@link #from$L(String, $T)}, also reporting the relaxations the match needed.\n\n"
+                            + withDoc + "@return the match, or empty if none\n" + nullDoc, suffix, strictness, p)
+                    .addStatement("return $N.match($N, strictness)", index, p).build());
+            // parse
+            builder.addMethod(method("parse" + suffix, type, p, false)
+                    .addJavadoc("Returns the entry whose {@code $L} is exactly the given code ({@code Strictness.STRICT}).\n\n"
+                            + strictDoc + "@return the entry\n@throws $T if none matches\n" + nullDoc, id, p, unknown)
+                    .addStatement("return parse$L($N, $T.STRICT)", suffix, p, strictness).build());
+            builder.addMethod(method("parse" + suffix, type, p, true)
+                    .addJavadoc("Returns the entry whose {@code $L} matches the code under the given strictness.\n\n"
+                            + withDoc + "@return the entry\n@throws $T if none matches\n" + nullDoc, id, p, unknown)
+                    .addStatement("return parse$LDetailed($N, strictness).entry()", suffix, p).build());
+            builder.addMethod(method("parse" + suffix + "Detailed", matchOfT, p, false)
+                    .addJavadoc("As {@link #parse$L(String)}, also reporting the relaxations the match needed.\n\n"
+                            + strictDoc + "@return the match\n@throws $T if none matches\n" + nullDoc, suffix, p, unknown)
+                    .addStatement("return parse$LDetailed($N, $T.STRICT)", suffix, p, strictness).build());
+            builder.addMethod(method("parse" + suffix + "Detailed", matchOfT, p, true)
+                    .addJavadoc("As {@link #parse$L(String, $T)}, also reporting the relaxations the match needed.\n\n"
+                            + withDoc + "@return the match\n@throws $T if none matches\n" + nullDoc,
+                            suffix, strictness, p, unknown)
+                    .addStatement("return $N.match($N, strictness).orElseThrow(() -> $N.unknown($N, strictness))",
+                            index, p, index, p).build());
+            // isValid
+            builder.addMethod(method("isValid" + suffix, TypeName.BOOLEAN, p, false)
+                    .addJavadoc("Whether the code is exactly a known {@code $L} ({@code Strictness.STRICT}).\n\n"
+                            + strictDoc + "@return true if an entry matches\n" + nullDoc, id, p)
+                    .addStatement("return isValid$L($N, $T.STRICT)", suffix, p, strictness).build());
+            builder.addMethod(method("isValid" + suffix, TypeName.BOOLEAN, p, true)
+                    .addJavadoc("Whether the code matches a known {@code $L} under the given strictness.\n\n"
+                            + withDoc + "@return true if an entry matches\n" + nullDoc, id, p)
+                    .addStatement("return $N.match($N, strictness).isPresent()", index, p).build());
+            builder.addMethod(method("isValid" + suffix + "Detailed", validationOfT, p, false)
+                    .addJavadoc("As {@link #isValid$L(String)}, with the match details.\n\n"
+                            + strictDoc + "@return the validation result\n" + nullDoc, suffix, p)
+                    .addStatement("return isValid$LDetailed($N, $T.STRICT)", suffix, p, strictness).build());
+            builder.addMethod(method("isValid" + suffix + "Detailed", validationOfT, p, true)
+                    .addJavadoc("As {@link #isValid$L(String, $T)}, with the match details.\n\n"
+                            + withDoc + "@return the validation result\n" + nullDoc, suffix, strictness, p)
+                    .addStatement("$T m = $N.match($N, strictness)", optionalMatch, index, p)
+                    .addStatement("return new $T<>(m.isPresent(), m)", validation).build());
         }
         builder.addStaticBlock(init.build());
+    }
+
+    private MethodSpec.Builder method(String name, TypeName returns, String param, boolean withStrictness) {
+        MethodSpec.Builder method = MethodSpec.methodBuilder(name)
+                .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
+                .returns(returns)
+                .addParameter(STRING, param);
+        if (withStrictness) {
+            method.addParameter(ClassName.get(basePackage, "Strictness"), "strictness");
+        }
+        return method;
     }
 
     private static String indexName(Field<?> field) {

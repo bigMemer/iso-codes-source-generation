@@ -1,0 +1,41 @@
+package __PACKAGE__;
+
+/** No entry matched the input under the strictness used. */
+public final class UnknownCodeException extends CodeRejectedException {
+
+    private static final long serialVersionUID = 1L;
+
+    /**
+     * Creates the exception.
+     *
+     * @param standard   the standard, e.g. {@code 3166-1}
+     * @param field      the code field, e.g. {@code alpha_2}
+     * @param input      the input exactly as passed in
+     * @param strictness the strictness used
+     */
+    public UnknownCodeException(String standard, String field, String input, Strictness strictness) {
+        super(quote(input) + " is not a known ISO " + standard + " " + field + " code",
+                standard, field, input, strictness);
+    }
+
+    private static String quote(String input) {
+        StringBuilder out = new StringBuilder("\"");
+        input.codePoints().forEach(cp -> {
+            switch (cp) {
+                case '"' -> out.append("\\\"");
+                case '\\' -> out.append("\\\\");
+                case '\n' -> out.append("\\n");
+                case '\r' -> out.append("\\r");
+                case '\t' -> out.append("\\t");
+                default -> {
+                    if (Character.isISOControl(cp) || Character.getType(cp) == Character.FORMAT) {
+                        out.append(String.format("\\u%04x", cp));
+                    } else {
+                        out.appendCodePoint(cp);
+                    }
+                }
+            }
+        });
+        return out.append('"').toString();
+    }
+}

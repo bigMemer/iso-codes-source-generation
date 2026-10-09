@@ -1,0 +1,147 @@
+package __PACKAGE__.internal;
+
+import __PACKAGE__.Match;
+import __PACKAGE__.Relaxation;
+import __PACKAGE__.Strictness;
+import __PACKAGE__.UnknownCodeException;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+
+/**
+ * Matches input against one code field, following the output specification's matching algorithm (§6.4).
+ *
+ * <p><b>Internal; not part of the API.</b> Public only so generated types in other packages can use it.
+ *
+ * @param <T> the entry type
+ */
+public final class Lookup<T> {
+
+    private final String standard;
+    private final String field;
+    private final boolean numeric;
+    private final Map<String, T> exact;
+    private final Map<String, T> folded = new HashMap<>();
+
+    /**
+     * Creates a lookup.
+     *
+     * @param standard the standard, e.g. {@code 3166-1}
+     * @param field    the code field, e.g. {@code alpha_2}
+     * @param numeric  whether the field is a numeric code, which enables {@link Relaxation#NUMERIC_PADDING}
+     * @param byValue  every entry by its canonical value for the field
+     */
+    public Lookup(String standard, String field, boolean numeric, Map<String, T> byValue) {
+        this.standard = standard;
+        this.field = field;
+        this.numeric = numeric;
+        this.exact = Map.copyOf(byValue);
+        byValue.forEach((value, entry) -> folded.put(asciiUpper(value), entry));
+    }
+
+    /**
+     * Matches the input.
+     *
+     * @param input      the input
+     * @param strictness the strictness
+     * @return the match, or empty if nothing matches
+     */
+    public Optional<Match<T>> match(String input, Strictness strictness) {
+        Objects.requireNonNull(input, field);
+        Objects.requireNonNull(strictness, "strictness");
+        EnumSet<Relaxation> observed = EnumSet.noneOf(Relaxation.class);
+        String s = input;
+
+        if (strictness.allows(Relaxation.WHITESPACE)) {
+            String trimmed = trimWhiteSpace(s);
+            if (!trimmed.equals(s)) {
+                observed.add(Relaxation.WHITESPACE);
+                s = trimmed;
+            }
+        }
+        if (strictness.allows(Relaxation.DASH)) {
+            String dashed = normaliseDashes(s);
+            if (!dashed.equals(s)) {
+                observed.add(Relaxation.DASH);
+                s = dashed;
+            }
+        }
+        if (strictness.allows(Relaxation.NUMERIC_PADDING) && numeric && isShortAsciiNumber(s)) {
+            s = "0".repeat(3 - s.length()) + s;
+            observed.add(Relaxation.NUMERIC_PADDING);
+        }
+
+        T entry = exact.get(s);
+        if (entry == null && strictness.allows(Relaxation.ASCII_CASE)) {
+            entry = folded.get(asciiUpper(s));
+            if (entry != null) {
+                observed.add(Relaxation.ASCII_CASE);
+            }
+        }
+        return entry == null ? Optional.empty() : Optional.of(new Match<>(entry, observed));
+    }
+
+    /**
+     * The exception to throw when {@link #match} finds nothing.
+     *
+     * @param input      the input
+     * @param strictness the strictness
+     * @return the exception
+     */
+    public UnknownCodeException unknown(String input, Strictness strictness) {
+        return new UnknownCodeException(standard, field, input, strictness);
+    }
+
+    /** Unicode White_Space, which differs from {@link Character#isWhitespace} (e.g. it includes U+00A0). */
+    private static boolean isWhiteSpace(int cp) {
+        return (cp >= 0x09 && cp <= 0x0D) || cp == 0x20 || cp == 0x85 || cp == 0xA0 || cp == 0x1680
+                || (cp >= 0x2000 && cp <= 0x200A) || cp == 0x2028 || cp == 0x2029 || cp == 0x202F || cp == 0x205F
+                || cp == 0x3000;
+    }
+
+    private static String trimWhiteSpace(String s) {
+        int start = 0;
+        int end = s.length();
+        while (start < end && isWhiteSpace(s.codePointAt(start))) {
+            start += Character.charCount(s.codePointAt(start));
+        }
+        while (end > start && isWhiteSpace(s.codePointBefore(end))) {
+            end -= Character.charCount(s.codePointBefore(end));
+        }
+        return s.substring(start, end);
+    }
+
+    private static String normaliseDashes(String s) {
+        StringBuilder out = new StringBuilder(s.length());
+        s.codePoints().forEach(cp -> out.appendCodePoint(switch (cp) {
+            case 0x2010, 0x2011, 0x2012, 0x2013, 0x2014, 0x2015, 0x2212, 0xFE58, 0xFE63, 0xFF0D -> '-';
+            default -> cp;
+        }));
+        return out.toString();
+    }
+
+    private static boolean isShortAsciiNumber(String s) {
+        if (s.isEmpty() || s.length() > 2) {
+            return false;
+        }
+        for (int i = 0; i < s.length(); i++) {
+            if (s.charAt(i) < '0' || s.charAt(i) > '9') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Upper-cases ASCII letters only, independent of locale. */
+    private static String asciiUpper(String s) {
+        char[] chars = s.toCharArray();
+        for (int i = 0; i < chars.length; i++) {
+            if (chars[i] >= 'a' && chars[i] <= 'z') {
+                chars[i] = (char) (chars[i] - 'a' + 'A');
+            }
+        }
+        return new String(chars);
+    }
+}

@@ -1,0 +1,62 @@
+package __PACKAGE__;
+
+import java.util.Objects;
+
+/** A code was rejected because of the data, not because the API was misused. */
+public abstract sealed class CodeRejectedException extends IllegalArgumentException permits UnknownCodeException {
+
+    private static final long serialVersionUID = 1L;
+
+    /** The standard, e.g. {@code 3166-1}. */
+    private final String standard;
+    /** The code field, e.g. {@code alpha_2}. */
+    private final String field;
+    /** The input exactly as passed in. */
+    private final String input;
+    /** The strictness used; not serialized. */
+    private final transient Strictness strictness;
+
+    CodeRejectedException(String message, String standard, String field, String input, Strictness strictness) {
+        super(message);
+        this.standard = Objects.requireNonNull(standard);
+        this.field = Objects.requireNonNull(field);
+        this.input = Objects.requireNonNull(input);
+        this.strictness = Objects.requireNonNull(strictness);
+    }
+
+    /**
+     * The standard, e.g. {@code 3166-1}.
+     *
+     * @return the standard
+     */
+    public String standard() {
+        return standard;
+    }
+
+    /**
+     * The code field, e.g. {@code alpha_2}.
+     *
+     * @return the field id
+     */
+    public String field() {
+        return field;
+    }
+
+    /**
+     * The input exactly as passed in.
+     *
+     * @return the input
+     */
+    public String input() {
+        return input;
+    }
+
+    /**
+     * The strictness used.
+     *
+     * @return the strictness
+     */
+    public Strictness strictness() {
+        return strictness;
+    }
+}

@@ -1,0 +1,27 @@
+package __PACKAGE__;
+
+import java.util.Objects;
+import java.util.Optional;
+
+/**
+ * The detailed result of a validity check.
+ *
+ * @param isValid whether the input is a valid code under the strictness used
+ * @param match   the match, present whenever the code matches
+ * @param <T>     the entry type
+ */
+public record Validation<T>(boolean isValid, Optional<Match<T>> match) {
+
+    /**
+     * Creates a validation result.
+     *
+     * @param isValid whether the input is valid
+     * @param match   the match, if any
+     */
+    public Validation {
+        Objects.requireNonNull(match, "match");
+        if (isValid != match.isPresent()) {
+            throw new IllegalArgumentException("isValid must be true exactly when there is a match");
+        }
+    }
+}

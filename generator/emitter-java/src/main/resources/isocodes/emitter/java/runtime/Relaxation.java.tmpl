@@ -1,0 +1,20 @@
+package __PACKAGE__;
+
+/**
+ * A named difference between an input and a code's canonical form that matching may tolerate.
+ *
+ * <p>The same values configure matching (through {@link Strictness}) and report what a match needed (through
+ * {@link Match#relaxations()}).
+ */
+public enum Relaxation {
+    /** ASCII letters in either case: {@code de} for {@code DE}. A format relaxation. */
+    ASCII_CASE,
+    /** A dash-like character in place of {@code -}: {@code US–CA} for {@code US-CA}. A format relaxation. */
+    DASH,
+    /** Leading and trailing Unicode whitespace: {@code " DE"} for {@code DE}. A format relaxation. */
+    WHITESPACE,
+    /** A numeric code without its leading zeros: {@code 4} for {@code 004}. A format relaxation. */
+    NUMERIC_PADDING,
+    /** A code ISO has withdrawn. A lifecycle relaxation, not included in {@link Strictness#LENIENT}. */
+    WITHDRAWN
+}

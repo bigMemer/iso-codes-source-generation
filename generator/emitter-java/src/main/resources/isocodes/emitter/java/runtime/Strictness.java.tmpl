@@ -1,0 +1,112 @@
+package __PACKAGE__;
+
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.Objects;
+import java.util.Set;
+
+/** The set of {@link Relaxation}s a lookup allows. Immutable. */
+public final class Strictness {
+
+    /** Allows nothing: input must be exactly a current code's canonical form. The default everywhere. */
+    public static final Strictness STRICT = new Strictness(EnumSet.noneOf(Relaxation.class));
+
+    /**
+     * Allows every format relaxation ({@link Relaxation#ASCII_CASE}, {@link Relaxation#DASH},
+     * {@link Relaxation#WHITESPACE}, {@link Relaxation#NUMERIC_PADDING}), but not {@link Relaxation#WITHDRAWN}.
+     */
+    public static final Strictness LENIENT = new Strictness(EnumSet.of(
+            Relaxation.ASCII_CASE, Relaxation.DASH, Relaxation.WHITESPACE, Relaxation.NUMERIC_PADDING));
+
+    private final Set<Relaxation> allowed;
+
+    private Strictness(EnumSet<Relaxation> allowed) {
+        this.allowed = Collections.unmodifiableSet(allowed);
+    }
+
+    /**
+     * Allows exactly the given relaxations.
+     *
+     * @param relaxations the relaxations to allow
+     * @return the strictness
+     */
+    public static Strictness allowing(Relaxation... relaxations) {
+        EnumSet<Relaxation> set = EnumSet.noneOf(Relaxation.class);
+        for (Relaxation relaxation : relaxations) {
+            set.add(Objects.requireNonNull(relaxation, "relaxation"));
+        }
+        return new Strictness(set);
+    }
+
+    /**
+     * Allows exactly the given relaxations.
+     *
+     * @param relaxations the relaxations to allow
+     * @return the strictness
+     */
+    public static Strictness allowing(Set<Relaxation> relaxations) {
+        return allowing(relaxations.toArray(new Relaxation[0]));
+    }
+
+    /**
+     * Returns a strictness that also allows the given relaxation.
+     *
+     * @param relaxation the relaxation to add
+     * @return a new strictness
+     */
+    public Strictness with(Relaxation relaxation) {
+        EnumSet<Relaxation> set = copy();
+        set.add(Objects.requireNonNull(relaxation, "relaxation"));
+        return new Strictness(set);
+    }
+
+    /**
+     * Returns a strictness that no longer allows the given relaxation.
+     *
+     * @param relaxation the relaxation to remove
+     * @return a new strictness
+     */
+    public Strictness without(Relaxation relaxation) {
+        EnumSet<Relaxation> set = copy();
+        set.remove(Objects.requireNonNull(relaxation, "relaxation"));
+        return new Strictness(set);
+    }
+
+    /**
+     * Whether this strictness allows the given relaxation.
+     *
+     * @param relaxation the relaxation
+     * @return true if allowed
+     */
+    public boolean allows(Relaxation relaxation) {
+        return allowed.contains(Objects.requireNonNull(relaxation, "relaxation"));
+    }
+
+    /**
+     * The allowed relaxations, in declaration order.
+     *
+     * @return an unmodifiable set
+     */
+    public Set<Relaxation> allowed() {
+        return allowed;
+    }
+
+    private EnumSet<Relaxation> copy() {
+        return allowed.isEmpty() ? EnumSet.noneOf(Relaxation.class) : EnumSet.copyOf(allowed);
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof Strictness that && allowed.equals(that.allowed);
+    }
+
+    @Override
+    public int hashCode() {
+        return allowed.hashCode();
+    }
+
+    @Override
+    public String toString() {
+        return "Strictness" + allowed;
+    }
+}

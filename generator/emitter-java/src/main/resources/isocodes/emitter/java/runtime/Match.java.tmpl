@@ -1,0 +1,29 @@
+package __PACKAGE__;
+
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.Objects;
+import java.util.Set;
+
+/**
+ * A successful lookup: the entry that matched, and the relaxations the match materially needed.
+ *
+ * @param entry       the matched entry
+ * @param relaxations the relaxations needed; empty if the input was already canonical
+ * @param <T>         the entry type
+ */
+public record Match<T>(T entry, Set<Relaxation> relaxations) {
+
+    /**
+     * Creates a match.
+     *
+     * @param entry       the matched entry
+     * @param relaxations the relaxations needed
+     */
+    public Match {
+        Objects.requireNonNull(entry, "entry");
+        EnumSet<Relaxation> copy = EnumSet.noneOf(Relaxation.class);
+        copy.addAll(Objects.requireNonNull(relaxations, "relaxations"));
+        relaxations = Collections.unmodifiableSet(copy);
+    }
+}
