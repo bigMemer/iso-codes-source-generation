@@ -110,10 +110,10 @@ public final class CldrSource {
         return new Contribution.Standard(entries, withdrawn);
     }
 
-    /** CLDR writes {@code US-CA} as {@code usca}. */
+    /** CLDR writes {@code US-CA} as {@code usca} (CLDR 29 onward; CLDR 28 used ISO's form). */
     static String isoCode(String cldrId) {
         String id = cldrId.toUpperCase(Locale.ROOT);
-        return id.substring(0, 2) + "-" + id.substring(2);
+        return id.contains("-") ? id : id.substring(0, 2) + "-" + id.substring(2);
     }
 
     /**
